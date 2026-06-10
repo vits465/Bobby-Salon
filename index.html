@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bobby Salon | The Craft of Grooming</title>
+    <meta name="description" content="A Modern Barbering Experience. Precision · Craft · Style." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&family=Source+Code+Pro&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <!-- Custom Cursor -->
+    <div class="custom-cursor"></div>
+
+    <!-- Header -->
+    <header class="header sticky-header">
+      <div class="header-left">
+        <nav class="header-nav">
+          <a href="#philosophy" class="hover-target">Philosophy</a>
+          <a href="#craft" class="hover-target">Services</a>
+          <a href="#portfolio" class="hover-target">Portfolio</a>
+        </nav>
+      </div>
+      
+      <div class="logo-center">
+        <a href="#" class="hover-target" style="display: flex; align-items: center; gap: 0.8rem; text-decoration: none;">
+          <img src="/logo.png" alt="Bobby Salon Logo" class="brand-logo" style="height: 65px; width: auto;" />
+          <span class="brand" style="font-size: 1.5rem; letter-spacing: 0.1em; color: var(--theme-main); white-space: nowrap;">BOBBY SALON</span>
+        </a>
+      </div>
+      
+      <div class="header-right">
+        <a href="#booking" class="magnetic-btn outline-btn hover-target">Book Now</a>
+        <button class="menu-btn hover-target" aria-label="Open Menu" style="margin-left: 2rem;">MENU</button>
+      </div>
+    </header>
+
+    <!-- Background Glow -->
+    <div class="ambient-glow"></div>
+
+    <div class="menu-backdrop" id="menu-backdrop"></div>
+    <div class="fullscreen-menu" id="fullscreen-menu">
+      <button class="close-btn hover-target" aria-label="Close Menu">CLOSE</button>
+      <div class="menu-content">
+        <ul class="menu-links">
+          <li><a href="#hero" class="hover-target">THE ROOMS</a></li>
+          <li><a href="#philosophy" class="hover-target">PHILOSOPHY</a></li>
+          <li><a href="#craft" class="hover-target">THE CRAFT</a></li>
+          <li><a href="#portfolio" class="hover-target">PORTFOLIO</a></li>
+          <li><a href="#experience" class="hover-target">EXPERIENCE</a></li>
+          <li><a href="#booking" class="hover-target">BOOKING</a></li>
+        </ul>
+        <div class="menu-side-info">
+          <p>BOBBY SALON EST. 2025</p>
+          <p>THE CRAFT OF GROOMING</p>
+          <p>SURAT, GUJARAT</p>
+        </div>
+      </div>
+    </div>
+
+    <main>
+      <!-- Hero Section: Asymmetrical Grid -->
+      <section id="hero" class="section-hero creative-hero">
+        <div class="video-background">
+          <video id="hero-local-video" muted playsinline autoplay>
+            <source src="/videos/Convert_the_uploaded_salon_vid.mp4" type="video/mp4">
+          </video>
+          <iframe id="hero-youtube" style="display: none;" loading="lazy" src="https://www.youtube.com/embed/KiP1k6Vsis0?autoplay=1&mute=1&controls=0&loop=1&playlist=KiP1k6Vsis0&playsinline=1&modestbranding=1&disablekb=1&rel=0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        </div>
+        <div class="hero-text-wrapper">
+          <div style="display: flex; align-items: center; gap: 2vw; margin-bottom: 1rem; justify-content: flex-start;" class="parallax-text">
+            <img src="/logo.png" alt="Bobby Salon Logo" class="hero-logo" style="height: clamp(6rem, 12vw, 12rem); width: auto; object-fit: contain; margin-left: -1rem;" />
+            <h1 class="main-title" style="text-align: left; margin: 0;">BOBBY<br>SALON</h1>
+          </div>
+          <div class="meta-lines fade-in-delay">
+            <p>A Modern Barbering Experience</p>
+            <p>Precision · Craft · Style</p>
+            <p>Est. 2025 — Surat</p>
+          </div>
+        </div>
+        
+        <div class="hero-image-grid parallax-images">
+          <div class="img-wrapper img-1 hover-expand">
+            <img src="/images/rooms/room1-back.jpg" alt="The Classic Cut" />
+          </div>
+          <div class="img-wrapper img-2 hover-expand">
+            <img src="/images/rooms/room2-back.jpg" alt="The Beard Room" />
+          </div>
+          <div class="img-wrapper img-3 hover-expand">
+            <img src="/images/rooms/room3-back.jpg" alt="The Hot Towel" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Philosophy Section: Sticky Scroll -->
+      <section id="philosophy" class="section-philosophy sticky-container">
+        <div class="sticky-bg"></div>
+        <div class="container sticky-content">
+          <div class="section-label">02 / PHILOSOPHY</div>
+          
+          <div class="philosophy-cards">
+            <div class="phil-card">
+              <h2 class="section-title">Traditional craft,<br>modern precision.</h2>
+              <p>At <em>Bobby Salon</em>, we believe that a haircut is more than maintenance — it is a ritual. Every service begins with a consultation, continues with meticulous attention to detail, and ends only when the reflection exceeds expectation.</p>
+            </div>
+            
+            <div class="phil-card">
+              <p>Our master barbers train for years in the classical techniques of scissor-over-comb, straight-razor shaving, and beard sculpting. These time-honored methods are paired with contemporary styling sensibilities to create looks that are both timeless and distinctly personal.</p>
+            </div>
+            
+            <div class="phil-card">
+              <p>The salon itself is designed as a sanctuary. Warm wood, brass fixtures, and leather chairs create an atmosphere where time slows down and the focus shifts entirely to you. This is not a quick trim. This is an experience.</p>
+              <div class="quote-wrapper">
+                <blockquote class="quote">"The difference is in the details you cannot see, only feel."</blockquote>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- The Craft Section -->
+      <section id="craft" class="section-craft parallax-video-container">
+        <div class="video-background parallax-video">
+          <iframe loading="lazy" src="https://www.youtube.com/embed/_GSc3uAm8rQ?autoplay=1&mute=1&controls=0&loop=1&playlist=_GSc3uAm8rQ&playsinline=1&modestbranding=1&disablekb=1&rel=0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        </div>
+        <div class="glass-panel glassmorphism">
+          <div class="section-label">THE CRAFT</div>
+          <div class="data-points">
+            <p>SIGNATURE CUT <span class="dot">·</span> 45 MIN <span class="dot">·</span> $65</p>
+            <p>STRAIGHT RAZOR SHAVE <span class="dot">·</span> 30 MIN <span class="dot">·</span> $55</p>
+            <p>BEARD SCULPTING <span class="dot">·</span> 30 MIN <span class="dot">·</span> $45</p>
+          </div>
+          <hr class="divider" />
+          <p class="description">Every service includes a hot towel treatment, premium product finish, and a moment of stillness before you return to the world.</p>
+        </div>
+      </section>
+
+      <!-- Portfolio Section: Masonry Grid -->
+      <section id="portfolio" class="section-portfolio">
+        <div class="container">
+          <div class="portfolio-header">
+            <div class="section-label">04 / PORTFOLIO</div>
+            <h2 class="section-title">The Collection</h2>
+          </div>
+          
+          <div class="infinite-slider-container" id="portfolio-slider-container">
+            <div class="infinite-slider-track" id="portfolio-slider-track">
+              <!-- Dynamically populated via JS from collection folder -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Experience Section -->
+      <section id="experience" class="section-experience">
+        <div class="video-wrapper hover-expand-large">
+           <img class="widescreen-image" src="/images/gallery/item8.jpg" alt="The Experience" />
+        </div>
+        <div class="experience-overlay parallax-text-slow dark-mode-text">
+          <div class="section-label">05 / EXPERIENCE</div>
+          <h2 class="video-title">Style That Moves</h2>
+          <a href="#booking" class="cta-button hover-target magnetic light-btn">BOOK YOUR VISIT &rarr;</a>
+        </div>
+      </section>
+
+      <!-- Booking Section -->
+      <section id="booking" class="section-booking">
+        <div class="ambient-glow bottom-glow"></div>
+        <div class="floral-corner-overlay corner-top-right"></div>
+        <div class="floral-corner-overlay corner-bottom-left"></div>
+        <div class="container glassmorphism-dark">
+          <div class="section-label">06 / BOOKING</div>
+          <h2 class="section-title">Reserve Your Chair</h2>
+          <p class="booking-description">Secure your time with our master barbers. Fill out the details below and we will confirm your appointment shortly.</p>
+          
+          <form id="booking-form" class="booking-form">
+            <div class="form-row">
+              <div class="form-group half">
+                <input type="text" id="b-name" placeholder=" " required class="hover-target" />
+                <label for="b-name">Full Name</label>
+              </div>
+              <div class="form-group half">
+                <input type="tel" id="b-phone" placeholder=" " required pattern="[0-9]{10,15}" title="Please enter 10 to 15 digits" class="hover-target" />
+                <label for="b-phone">Phone Number</label>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group half">
+                <select id="b-gender" required class="hover-target">
+                  <option value="" disabled selected>Select Gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+              
+              <div class="form-group half">
+                <select id="b-service" required class="hover-target" disabled>
+                  <option value="" disabled selected>Select Service</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-top: 1rem;">
+              <select id="b-barber" required class="hover-target">
+                <option value="" disabled selected>Preferred Barber</option>
+                <option value="Any Available">Any Available</option>
+                <option value="Bobby">Bobby</option>
+                <option value="Sumit">Sumit</option>
+              </select>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group half" style="margin-bottom: 1rem;">
+                <input type="date" id="b-date" required class="hover-target" />
+                <label for="b-date" class="static-label">Preferred Date</label>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 1rem;">
+              <label class="static-label" style="position: relative; top: 0; margin-bottom: 1rem; display: block;">Select Time Slot</label>
+              <div class="time-slot-grid" id="time-slot-grid">
+                <!-- Slots will be generated by JS -->
+              </div>
+              <input type="hidden" id="b-time" required />
+              <input type="hidden" id="b-queue" value="false" />
+            </div>
+            
+            <button type="submit" class="submit-btn hover-target magnetic" id="booking-submit-btn">BOOK VIA WHATSAPP &rarr;</button>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-grid">
+          <div class="footer-col">
+            <h3>SERVICES</h3>
+            <ul>
+              <li><a href="#" class="hover-target">Signature Cut</a></li>
+              <li><a href="#" class="hover-target">Straight Razor Shave</a></li>
+              <li><a href="#" class="hover-target">Beard Sculpting</a></li>
+              <li><a href="#" class="hover-target">Hot Towel Treatment</a></li>
+              <li><a href="#" class="hover-target">Hair Styling</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h3>VISIT US</h3>
+            <ul>
+              <li>104,105,106 - First Floor</li>
+              <li>Abhushan Complex, Alkapuri, Surat</li>
+              <li>Bobby Parmar: +91 7435872275</li>
+              <li>Sumit Parmar: +91 7574947065</li>
+            </ul>
+          </div>
+        </div>
+        <div class="ticker-wrap hover-target">
+          <div class="ticker">
+            <span class="ticker-item">PRECISION</span>
+            <span class="ticker-item">CRAFT</span>
+            <span class="ticker-item">STYLE</span>
+            <span class="ticker-item">GROOMING</span>
+            <span class="ticker-item">RAZOR</span>
+            <span class="ticker-item">SCISSORS</span>
+            <span class="ticker-item">TOWEL</span>
+            <span class="ticker-item">BEARD</span>
+            <span class="ticker-item">FADE</span>
+            <span class="ticker-item">SHEARS</span>
+            <span class="ticker-item">BLEND</span>
+            <span class="ticker-item">TEXTURE</span>
+            <span class="ticker-item">CLASSIC</span>
+            <span class="ticker-item">MODERN</span>
+            <!-- Duplicate for seamless loop -->
+            <span class="ticker-item">PRECISION</span>
+            <span class="ticker-item">CRAFT</span>
+            <span class="ticker-item">STYLE</span>
+            <span class="ticker-item">GROOMING</span>
+            <span class="ticker-item">RAZOR</span>
+            <span class="ticker-item">SCISSORS</span>
+            <span class="ticker-item">TOWEL</span>
+            <span class="ticker-item">BEARD</span>
+            <span class="ticker-item">FADE</span>
+            <span class="ticker-item">SHEARS</span>
+            <span class="ticker-item">BLEND</span>
+            <span class="ticker-item">TEXTURE</span>
+            <span class="ticker-item">CLASSIC</span>
+            <span class="ticker-item">MODERN</span>
+          </div>
+        </div>
+        <div class="copyright">
+          © 2026 Bobby Salon. All Rights Reserved.
+        </div>
+      </div>
+    </footer>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmation-modal" class="modal-overlay">
+      <div class="modal-content glassmorphism-dark">
+        <h2>Booking Successful!</h2>
+        <p>Redirecting you to WhatsApp to confirm your slot...</p>
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
