@@ -5,10 +5,6 @@ dotenv.config();
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || 'Bobby-salon';
 
-if (!MONGODB_URI) {
-  throw new Error('MONGODB_URI is not defined in .env');
-}
-
 let client = null;
 let db = null;
 let connectionPromise = null;
@@ -18,6 +14,10 @@ let connectionPromise = null;
  * Reuses existing connection if already connected.
  */
 export async function connectDB() {
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI is not defined in Vercel Environment Variables. Please add it in the Vercel Dashboard.');
+  }
+  
   if (db) return db;
   if (connectionPromise) return connectionPromise;
 
