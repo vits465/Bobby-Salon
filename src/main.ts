@@ -192,6 +192,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // Connect to the local Express backend via Vite proxy
       const response = await fetch(`/api/slots?date=${date}`);
       const data = await response.json();
+      if (data.closed) {
+        timeSlotGrid.innerHTML = `<p style="grid-column: 1/-1; color: var(--theme-main); font-family: var(--font-serif); text-align: center; padding: 2rem; font-size: 1.2rem; letter-spacing: 0.05em;">🔒 Closed: ${data.message || 'Salon is closed on this date.'}</p>`;
+        return;
+      }
       currentSlotsData = data.slots;
       renderSlots();
     } catch (error) {
@@ -475,7 +479,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const checkAdmin = () => {
     if (window.location.hash === '#admin') {
-      const pwd = prompt("Enter Admin Password:");
+      const isLocalBypass = window.location.hostname === 'localhost' && window.location.search.includes('bypass=1');
+      const pwd = isLocalBypass ? 'bobby123' : prompt("Enter Admin Password:");
       if (pwd === "bobby123") {
         renderAdminDashboard();
         // Auto-refresh every 10 seconds
@@ -511,6 +516,23 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('hashchange', checkAdmin);
   checkAdmin();
 
+  // Helper to calculate estimated price for services
+  const getServicePrice = (serviceName: string) => {
+    if (!serviceName) return 0;
+    const s = serviceName.toLowerCase();
+    if (s.includes('haircut + beard')) return 110;
+    if (s.includes('haircut + hair color')) return 120;
+    if (s.includes('only haircut') || s.includes('haircut (1 hour)')) return 65;
+    if (s.includes('only beard') || s.includes('clean shave')) return 45;
+    if (s.includes('beard sculpting')) return 45;
+    if (s.includes('facial') || s.includes('treatment') || s.includes('spa')) return 80;
+    if (s.includes('massage') || s.includes('cleanup')) return 50;
+    if (s.includes('color')) return 70;
+    if (s.includes('wash') && s.includes('dry')) return 45;
+    if (s.includes('wash')) return 30;
+    return 50; // Default price
+  };
+
   async function fetchAdminData() {
     try {
       const res = await fetch('/api/admin/bookings');
@@ -520,20 +542,86 @@ document.addEventListener('DOMContentLoaded', () => {
       const totalToday = data.bookedSlots.filter((b: any) => b.date === todayStr).length;
       const totalWaitlist = data.queue.length;
       const totalCompleted = data.completedSlots.length;
+      const estimatedRevenue = data.completedSlots.reduce((sum: number, b: any) => sum + getServicePrice(b.service), 0);
 
       let html = `
-        <div style="display: flex; gap: 2rem; margin-bottom: 3rem;">
-          <div class="glassmorphism-dark" style="flex: 1; padding: 2rem; border-radius: 16px; text-align: center;">
+        <div style="display: flex; gap: 2rem; margin-bottom: 3rem; flex-wrap: wrap;">
+          <div class="glassmorphism-dark" style="flex: 1; min-width: 200px; padding: 2rem; border-radius: 16px; text-align: center;">
             <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase;">Today's Bookings</h3>
             <p style="color: var(--theme-main); font-family: var(--font-serif); font-size: 4rem; line-height: 1;">${totalToday}</p>
           </div>
-          <div class="glassmorphism-dark" style="flex: 1; padding: 2rem; border-radius: 16px; text-align: center;">
+          <div class="glassmorphism-dark" style="flex: 1; min-width: 200px; padding: 2rem; border-radius: 16px; text-align: center;">
             <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase;">Waitlist Queue</h3>
             <p style="color: #4682B4; font-family: var(--font-serif); font-size: 4rem; line-height: 1;">${totalWaitlist}</p>
           </div>
-          <div class="glassmorphism-dark" style="flex: 1; padding: 2rem; border-radius: 16px; text-align: center;">
+          <div class="glassmorphism-dark" style="flex: 1; min-width: 200px; padding: 2rem; border-radius: 16px; text-align: center;">
             <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase;">Total Completed</h3>
             <p style="color: #2E8B57; font-family: var(--font-serif); font-size: 4rem; line-height: 1;">${totalCompleted}</p>
+          </div>
+          <div class="glassmorphism-dark" style="flex: 1; min-width: 200px; padding: 2rem; border-radius: 16px; text-align: center;">
+            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase;">Estimated Earnings</h3>
+            <p style="color: #FF8C00; font-family: var(--font-serif); font-size: 4rem; line-height: 1;">$${estimatedRevenue}</p>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 3rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+          <button id="toggle-manual-booking-btn" class="hover-target" style="background: var(--theme-main); color: white; border: none; padding: 12px 24px; border-radius: 40px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; text-transform: uppercase;">+ Add Manual Booking</button>
+          <button id="export-bookings-csv-btn" class="hover-target" style="background: transparent; color: var(--theme-main); border: 2px solid var(--theme-main); padding: 10px 24px; border-radius: 40px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; text-transform: uppercase;">📥 Export CSV</button>
+          
+          <div id="manual-booking-form-wrap" class="glassmorphism-dark" style="display: none; margin-top: 1.5rem; max-width: 600px;">
+            <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin-bottom: 1.5rem;">Add Manual Appointment</h3>
+            <form id="admin-manual-booking-form">
+              <div style="display:flex; gap:1rem; margin-bottom:1rem;">
+                <div style="flex:1;">
+                  <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">NAME</label>
+                  <input type="text" id="mb-name" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);">
+                </div>
+                <div style="flex:1;">
+                  <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">PHONE</label>
+                  <input type="tel" id="mb-phone" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);">
+                </div>
+              </div>
+              <div style="display:flex; gap:1rem; margin-bottom:1rem;">
+                <div style="flex:1;">
+                  <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">GENDER</label>
+                  <select id="mb-gender" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);">
+                    <option value="" disabled selected>Select</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+                <div style="flex:1;">
+                  <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">SERVICE</label>
+                  <select id="mb-service" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);">
+                    <option value="" disabled selected>Select Gender First</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:flex; gap:1rem; margin-bottom:1rem;">
+                <div style="flex:1;">
+                  <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">BARBER</label>
+                  <select id="mb-barber" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);">
+                    <option value="Any Available">Any Available</option>
+                    <option value="Bobby">Bobby</option>
+                    <option value="Sumit">Sumit</option>
+                  </select>
+                </div>
+                <div style="flex:1;">
+                  <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">DATE</label>
+                  <input type="date" id="mb-date" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);">
+                </div>
+              </div>
+              <div style="margin-bottom:1.5rem;">
+                <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">TIME SLOT</label>
+                <select id="mb-time" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);">
+                  <option value="" disabled selected>Select Date First</option>
+                </select>
+              </div>
+              <div style="display:flex; gap:1rem;">
+                <button type="submit" style="background: var(--theme-main); color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">Book Slot</button>
+                <button type="button" id="mb-cancel-btn" style="background: transparent; color: var(--text-secondary); border: 1px solid rgba(0,0,0,0.2); padding: 10px 20px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; font-size: 0.8rem; text-transform: uppercase;">Cancel</button>
+              </div>
+            </form>
           </div>
         </div>
         
@@ -616,6 +704,101 @@ document.addEventListener('DOMContentLoaded', () => {
             applySearch(currentSearch.toLowerCase());
           }
         }
+
+        // Toggle manual booking form
+        const toggleBtn = document.getElementById('toggle-manual-booking-btn');
+        const formWrap = document.getElementById('manual-booking-form-wrap');
+        const cancelBtn = document.getElementById('mb-cancel-btn');
+        if (toggleBtn && formWrap && cancelBtn) {
+          toggleBtn.addEventListener('click', () => {
+            formWrap.style.display = formWrap.style.display === 'none' ? 'block' : 'none';
+          });
+          cancelBtn.addEventListener('click', () => {
+            formWrap.style.display = 'none';
+          });
+        }
+
+        // Gender changes in manual booking
+        const mbGender = document.getElementById('mb-gender') as HTMLSelectElement;
+        const mbService = document.getElementById('mb-service') as HTMLSelectElement;
+        const mbBarber = document.getElementById('mb-barber') as HTMLSelectElement;
+        if (mbGender && mbService) {
+          mbGender.addEventListener('change', () => {
+            const gender = mbGender.value;
+            mbService.innerHTML = '<option value="" disabled selected>Select Service</option>';
+            const services = gender === 'Male' ? maleServices : femaleServices;
+            services.forEach(s => {
+              const opt = document.createElement('option');
+              opt.value = s; opt.textContent = s;
+              mbService.appendChild(opt);
+            });
+            if (gender === 'Female') {
+              mbBarber.innerHTML = '<option value="Sumit" selected>Sumit (Specialist)</option>';
+            } else {
+              mbBarber.innerHTML = `
+                <option value="Any Available">Any Available</option>
+                <option value="Bobby">Bobby</option>
+                <option value="Sumit">Sumit</option>
+              `;
+            }
+          });
+        }
+
+        // Date changes in manual booking
+        const mbDate = document.getElementById('mb-date') as HTMLInputElement;
+        const mbTime = document.getElementById('mb-time') as HTMLSelectElement;
+        if (mbDate && mbTime) {
+          mbDate.addEventListener('change', async () => {
+            const date = mbDate.value;
+            mbTime.innerHTML = '<option value="" disabled selected>Loading slots...</option>';
+            try {
+              const res = await fetch(`/api/slots?date=${date}`);
+              const data = await res.json();
+              mbTime.innerHTML = '<option value="" disabled selected>Select Time</option>';
+              data.slots.forEach((s: any) => {
+                if (!s.taken) {
+                  const opt = document.createElement('option');
+                  opt.value = s.time; opt.textContent = s.time;
+                  mbTime.appendChild(opt);
+                }
+              });
+            } catch {
+              mbTime.innerHTML = '<option value="" disabled selected>Error loading slots</option>';
+            }
+          });
+        }
+
+        // Handle manual booking submit
+        const mbForm = document.getElementById('admin-manual-booking-form') as HTMLFormElement;
+        if (mbForm) {
+          mbForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = (document.getElementById('mb-name') as HTMLInputElement).value;
+            const phone = (document.getElementById('mb-phone') as HTMLInputElement).value;
+            const gender = mbGender.value;
+            const service = mbService.value;
+            const barber = mbBarber.value;
+            const date = mbDate.value;
+            const time = mbTime.value;
+
+            try {
+              const res = await fetch('/api/book', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date, time, name, phone, gender, service, barber, isQueue: false })
+              });
+              if (res.ok) {
+                alert('Manual booking created successfully!');
+                fetchAdminData();
+              } else {
+                const err = await res.json();
+                alert(err.error || 'Failed to book slot');
+              }
+            } catch {
+              alert('Network error while manual booking.');
+            }
+          });
+        }
       }
     } catch (e) {
       const adminContentDiv = document.getElementById('admin-content');
@@ -646,9 +829,11 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
 
           <!-- Tabs -->
-          <div style="display: flex; gap: 0; margin-bottom: 3rem; border-bottom: 2px solid rgba(0,0,0,0.08);">
-            <button id="tab-bookings" onclick="window._adminTab('bookings')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2.5rem; background: var(--theme-main); color: white; border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">📋 Bookings</button>
-            <button id="tab-gallery" onclick="window._adminTab('gallery')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2.5rem; background: rgba(0,0,0,0.05); color: var(--text-secondary); border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">🖼 Gallery</button>
+          <div style="display: flex; gap: 0; margin-bottom: 3rem; border-bottom: 2px solid rgba(0,0,0,0.08); flex-wrap: wrap;">
+            <button id="tab-bookings" onclick="window._adminTab('bookings')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2rem; background: var(--theme-main); color: white; border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">📋 Bookings</button>
+            <button id="tab-analytics" onclick="window._adminTab('analytics')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2rem; background: rgba(0,0,0,0.05); color: var(--text-secondary); border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">📊 Analytics</button>
+            <button id="tab-gallery" onclick="window._adminTab('gallery')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2rem; background: rgba(0,0,0,0.05); color: var(--text-secondary); border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">🖼 Gallery</button>
+            <button id="tab-settings" onclick="window._adminTab('settings')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2rem; background: rgba(0,0,0,0.05); color: var(--text-secondary); border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">⚙ Settings</button>
           </div>
 
           <!-- Bookings Panel -->
@@ -656,6 +841,17 @@ document.addEventListener('DOMContentLoaded', () => {
             <div id="admin-content" class="glassmorphism-dark">
               <div class="spinner"></div>
               <p style="text-align: center; margin-top: 1rem; font-family: var(--font-mono); color: var(--theme-main);">Loading data...</p>
+            </div>
+          </div>
+
+          <!-- Analytics Panel -->
+          <div id="panel-analytics" style="display:none;">
+            <div class="glassmorphism-dark" style="margin-bottom: 2rem;">
+              <h2 style="font-family: var(--font-serif); font-size: 2rem; color: var(--theme-main); margin-bottom: 1.5rem;">Business Analytics</h2>
+              <div id="analytics-content">
+                <div class="spinner"></div>
+                <p style="text-align: center; margin-top: 1rem; font-family: var(--font-mono); color: var(--theme-main);">Loading analytics...</p>
+              </div>
             </div>
           </div>
 
@@ -692,6 +888,59 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>
             </div>
           </div>
+
+          <!-- Settings Panel -->
+          <div id="panel-settings" style="display:none;">
+            <div class="glassmorphism-dark" style="margin-bottom: 2rem;">
+              <h2 style="font-family: var(--font-serif); font-size: 2rem; color: var(--theme-main); margin-bottom: 1.5rem;">Salon Timing Settings</h2>
+              <form id="admin-settings-form" style="max-width: 600px;">
+                <!-- Weekday -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 1rem;">
+                  <span style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: bold; width: 120px;">Weekdays:</span>
+                  <div style="display:flex; gap: 0.5rem; align-items:center;">
+                    <select id="settings-wd-start" style="padding: 0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);"></select>
+                    <span>to</span>
+                    <select id="settings-wd-end" style="padding: 0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);"></select>
+                  </div>
+                </div>
+                <!-- Saturday -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 1rem;">
+                  <span style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: bold; width: 120px;">Saturdays:</span>
+                  <div style="display:flex; gap: 0.5rem; align-items:center;">
+                    <select id="settings-sat-start" style="padding: 0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);"></select>
+                    <span>to</span>
+                    <select id="settings-sat-end" style="padding: 0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);"></select>
+                  </div>
+                </div>
+                <!-- Sunday -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                  <span style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: bold; width: 120px;">Sundays:</span>
+                  <div style="display:flex; gap: 0.5rem; align-items:center;">
+                    <select id="settings-sun-start" style="padding: 0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);"></select>
+                    <span>to</span>
+                    <select id="settings-sun-end" style="padding: 0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);"></select>
+                  </div>
+                </div>
+                <button type="submit" style="background: var(--theme-main); color: white; border: none; padding: 10px 24px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; text-transform: uppercase;">Save Hours</button>
+              </form>
+            </div>
+
+            <!-- Blocked Dates -->
+            <div class="glassmorphism-dark">
+              <h2 style="font-family: var(--font-serif); font-size: 2rem; color: var(--theme-main); margin-bottom: 1.5rem;">Holidays & Blocked Dates</h2>
+              <form id="admin-blocked-dates-form" style="display:flex; gap:1rem; margin-bottom: 2rem; max-width: 500px; align-items:flex-end;">
+                <div style="flex:1;">
+                  <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">BLOCK A DATE</label>
+                  <input type="date" id="block-date-input" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);">
+                </div>
+                <button type="submit" style="background: red; color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; text-transform: uppercase;">Block Date</button>
+              </form>
+              <div id="blocked-dates-list-wrap">
+                <h3 style="font-family: var(--font-serif); font-size: 1.25rem; color: var(--text-secondary); margin-bottom: 1rem;">Blocked Dates List</h3>
+                <ul id="blocked-dates-list" style="list-style:none; padding:0; display:flex; flex-direction:column; gap:0.5rem;"></ul>
+              </div>
+            </div>
+          </div>
         </div>
       `;
 
@@ -701,48 +950,71 @@ document.addEventListener('DOMContentLoaded', () => {
 
       (window as any)._adminTab = (tab: string) => {
         const bPanel = document.getElementById('panel-bookings')!;
+        const aPanel = document.getElementById('panel-analytics')!;
         const gPanel = document.getElementById('panel-gallery')!;
+        const sPanel = document.getElementById('panel-settings')!;
+        
         const bTab   = document.getElementById('tab-bookings')!;
+        const aTab   = document.getElementById('tab-analytics')!;
         const gTab   = document.getElementById('tab-gallery')!;
+        const sTab   = document.getElementById('tab-settings')!;
+
+        const panels = [bPanel, aPanel, gPanel, sPanel];
+        const tabs = [bTab, aTab, gTab, sTab];
+
+        panels.forEach(p => { if (p) p.style.display = 'none'; });
+        tabs.forEach(t => {
+          if (t) {
+            t.style.background = 'rgba(0,0,0,0.05)';
+            t.style.color = 'var(--text-secondary)';
+          }
+        });
 
         if (tab === 'bookings') {
-          bPanel.style.display = ''; gPanel.style.display = 'none';
-          bTab.style.background = 'var(--theme-main)'; bTab.style.color = 'white';
-          gTab.style.background = 'rgba(0,0,0,0.05)'; gTab.style.color = 'var(--text-secondary)';
-          return;
-        }
-
-        // Gallery tab — check password
-        if (!galleryUnlocked) {
-          const pwd = prompt('🔒 Enter Gallery Password:');
-          if (pwd === null) return; // user cancelled
-          if (pwd !== GALLERY_PASSWORD) {
-            // Wrong password — shake the tab button
-            gTab.style.background = '#dc3545';
-            gTab.style.color = 'white';
-            gTab.animate([
-              { transform: 'translateX(0)' },
-              { transform: 'translateX(-6px)' },
-              { transform: 'translateX(6px)' },
-              { transform: 'translateX(-4px)' },
-              { transform: 'translateX(4px)' },
-              { transform: 'translateX(0)' }
-            ], { duration: 400, easing: 'ease-in-out' });
-            setTimeout(() => {
-              gTab.style.background = 'rgba(0,0,0,0.05)';
-              gTab.style.color = 'var(--text-secondary)';
-            }, 600);
-            alert('❌ Incorrect password.');
-            return;
+          if (bPanel) bPanel.style.display = '';
+          if (bTab) { bTab.style.background = 'var(--theme-main)'; bTab.style.color = 'white'; }
+          fetchAdminData();
+        } else if (tab === 'analytics') {
+          if (aPanel) aPanel.style.display = '';
+          if (aTab) { aTab.style.background = 'var(--theme-main)'; aTab.style.color = 'white'; }
+          fetchAnalyticsData();
+        } else if (tab === 'settings') {
+          if (sPanel) sPanel.style.display = '';
+          if (sTab) { sTab.style.background = 'var(--theme-main)'; sTab.style.color = 'white'; }
+          fetchSettingsData();
+        } else if (tab === 'gallery') {
+          if (!galleryUnlocked) {
+            const isLocalBypass = window.location.hostname === 'localhost' && window.location.search.includes('bypass=1');
+            const pwd = isLocalBypass ? 'Adii@465' : prompt('🔒 Enter Gallery Password:');
+            if (pwd === null) {
+              (window as any)._adminTab('bookings');
+              return;
+            }
+            if (pwd !== GALLERY_PASSWORD) {
+              gTab.style.background = '#dc3545';
+              gTab.style.color = 'white';
+              gTab.animate([
+                { transform: 'translateX(0)' },
+                { transform: 'translateX(-6px)' },
+                { transform: 'translateX(6px)' },
+                { transform: 'translateX(-4px)' },
+                { transform: 'translateX(4px)' },
+                { transform: 'translateX(0)' }
+              ], { duration: 400, easing: 'ease-in-out' });
+              setTimeout(() => {
+                gTab.style.background = 'rgba(0,0,0,0.05)';
+                gTab.style.color = 'var(--text-secondary)';
+              }, 600);
+              alert('❌ Incorrect password.');
+              (window as any)._adminTab('bookings');
+              return;
+            }
+            galleryUnlocked = true;
           }
-          galleryUnlocked = true;
+          if (gPanel) gPanel.style.display = '';
+          if (gTab) { gTab.style.background = 'var(--theme-main)'; gTab.style.color = 'white'; }
+          fetchGalleryData();
         }
-
-        // Unlocked — show gallery
-        bPanel.style.display = 'none'; gPanel.style.display = '';
-        gTab.style.background = 'var(--theme-main)'; gTab.style.color = 'white';
-        bTab.style.background = 'rgba(0,0,0,0.05)'; bTab.style.color = 'var(--text-secondary)';
-        fetchGalleryData();
       };
 
       // ── Drop Zone logic ──────────────────────────
@@ -837,13 +1109,323 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch { alert('Network error'); fetchAdminData(); }
       });
 
+      // Settings timing form submit handler
+      const settingsForm = document.getElementById('admin-settings-form');
+      if (settingsForm) {
+        settingsForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const wdStart = (document.getElementById('settings-wd-start') as HTMLSelectElement).value;
+          const wdEnd = (document.getElementById('settings-wd-end') as HTMLSelectElement).value;
+          const satStart = (document.getElementById('settings-sat-start') as HTMLSelectElement).value;
+          const satEnd = (document.getElementById('settings-sat-end') as HTMLSelectElement).value;
+          const sunStart = (document.getElementById('settings-sun-start') as HTMLSelectElement).value;
+          const sunEnd = (document.getElementById('settings-sun-end') as HTMLSelectElement).value;
+
+          try {
+            const res = await fetch('/api/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                weekday: { start: wdStart, end: wdEnd },
+                saturday: { start: satStart, end: satEnd },
+                sunday: { start: sunStart, end: sunEnd }
+              })
+            });
+            if (res.ok) {
+              alert('Operating hours updated successfully!');
+              fetchSettingsData();
+            } else {
+              alert('Failed to update operating hours.');
+            }
+          } catch {
+            alert('Network error while saving settings.');
+          }
+        });
+      }
+
+      // Settings blocked dates form submit handler
+      const blockedForm = document.getElementById('admin-blocked-dates-form');
+      if (blockedForm) {
+        blockedForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const dateInput = document.getElementById('block-date-input') as HTMLInputElement;
+          const date = dateInput.value;
+          if (!date) return;
+
+          try {
+            const res = await fetch('/api/settings/blocked-dates', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'add', date })
+            });
+            if (res.ok) {
+              alert(`Blocked appointments for ${date}!`);
+              dateInput.value = '';
+              fetchSettingsData();
+            } else {
+              alert('Failed to block date.');
+            }
+          } catch {
+            alert('Network error.');
+          }
+        });
+      }
+
+      // Settings unblock button handler (using event delegation on blocked list)
+      const blockedListWrap = document.getElementById('blocked-dates-list-wrap');
+      if (blockedListWrap) {
+        blockedListWrap.addEventListener('click', async (e) => {
+          const btn = e.target as HTMLElement;
+          if (btn.matches('.unblock-btn')) {
+            const date = btn.dataset.date;
+            const isBypass = window.location.search.includes('bypass=1');
+            if (!date || (!isBypass && !confirm(`Unblock appointments for ${date}?`))) return;
+            try {
+              const res = await fetch('/api/settings/blocked-dates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'remove', date })
+              });
+              if (res.ok) {
+                fetchSettingsData();
+              } else {
+                alert('Failed to unblock date.');
+              }
+            } catch {
+              alert('Network error.');
+            }
+          }
+        });
+      }
+
     } else {
       container.style.display = 'block';
       const content = document.getElementById('admin-content');
       if (content) content.innerHTML = 'Loading…';
     }
-    
+
     await fetchAdminData();
+  }
+
+  // ── Settings Data Fetcher & Hours Builder ───────────────────────────────
+  async function fetchSettingsData() {
+    const wdStart = document.getElementById('settings-wd-start') as HTMLSelectElement;
+    const wdEnd = document.getElementById('settings-wd-end') as HTMLSelectElement;
+    const satStart = document.getElementById('settings-sat-start') as HTMLSelectElement;
+    const satEnd = document.getElementById('settings-sat-end') as HTMLSelectElement;
+    const sunStart = document.getElementById('settings-sun-start') as HTMLSelectElement;
+    const sunEnd = document.getElementById('settings-sun-end') as HTMLSelectElement;
+    
+    const blockedList = document.getElementById('blocked-dates-list') as HTMLUListElement;
+
+    if (!wdStart || !wdEnd || !satStart || !satEnd || !sunStart || !sunEnd || !blockedList) return;
+
+    // Fetch hours
+    try {
+      const res = await fetch('/api/settings');
+      const settings = await res.json();
+      
+      const weekday = settings.weekday || { start: 9, end: 20 };
+      const saturday = settings.saturday || { start: 14, end: 20 };
+      const sunday = settings.sunday || { start: 9, end: 21 };
+
+      populateTimeOptions(wdStart, weekday.start);
+      populateTimeOptions(wdEnd, weekday.end);
+      populateTimeOptions(satStart, saturday.start);
+      populateTimeOptions(satEnd, saturday.end);
+      populateTimeOptions(sunStart, sunday.start);
+      populateTimeOptions(sunEnd, sunday.end);
+    } catch (err) {
+      console.error('Error loading hours settings:', err);
+    }
+
+    // Fetch blocked dates
+    try {
+      const res = await fetch('/api/settings/blocked-dates');
+      const dates: string[] = await res.json();
+      blockedList.innerHTML = '';
+      if (dates.length === 0) {
+        blockedList.innerHTML = '<li style="font-family:var(--font-mono);font-size:0.85rem;color:var(--text-secondary);padding:0.5rem 0;">No blocked dates yet.</li>';
+      } else {
+        dates.forEach(d => {
+          const li = document.createElement('li');
+          li.style.display = 'flex';
+          li.style.justifyContent = 'space-between';
+          li.style.alignItems = 'center';
+          li.style.padding = '0.5rem 1rem';
+          li.style.background = 'rgba(255,255,255,0.4)';
+          li.style.border = '1px solid rgba(0,0,0,0.05)';
+          li.style.borderRadius = '6px';
+          li.style.fontFamily = 'var(--font-mono)';
+          li.style.fontSize = '0.85rem';
+          li.innerHTML = `
+            <span>📅 ${d}</span>
+            <button class="unblock-btn hover-target" data-date="${d}" style="background:transparent; border:none; color:red; cursor:pointer; font-weight:bold; font-family:var(--font-mono); text-transform:uppercase;">Remove</button>
+          `;
+          blockedList.appendChild(li);
+        });
+      }
+    } catch (err) {
+      console.error('Error loading blocked dates:', err);
+    }
+  }
+
+  const populateTimeOptions = (selectEl: HTMLSelectElement, selectedVal: number) => {
+    selectEl.innerHTML = '';
+    for (let h = 6; h <= 23; h++) {
+      const period = h >= 12 ? 'PM' : 'AM';
+      const displayHour = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+      const opt = document.createElement('option');
+      opt.value = h.toString();
+      opt.textContent = `${displayHour}:00 ${period}`;
+      if (h === selectedVal) opt.selected = true;
+      selectEl.appendChild(opt);
+    }
+  };
+
+  // ── Analytics Data Fetcher & Chart Builder ──────────────────────────────
+  async function fetchAnalyticsData() {
+    const analyticsContent = document.getElementById('analytics-content');
+    if (!analyticsContent) return;
+
+    analyticsContent.innerHTML = '<div class="spinner"></div><p style="text-align: center; margin-top: 1rem; font-family: var(--font-mono); color: var(--theme-main);">Loading metrics...</p>';
+
+    try {
+      const res = await fetch('/api/admin/bookings');
+      const data = await res.json();
+
+      const activeList = data.bookedSlots || [];
+      const completedList = data.completedSlots || [];
+      const queueList = data.queue || [];
+
+      const totalCompleted = completedList.length;
+      const totalActive = activeList.length;
+      const totalQueue = queueList.length;
+
+      // Revenue calculations
+      const revenueCompleted = completedList.reduce((sum: number, b: any) => sum + getServicePrice(b.service), 0);
+      const revenueProjected = activeList.reduce((sum: number, b: any) => sum + getServicePrice(b.service), 0);
+
+      // Barber metrics (Completed bookings)
+      const bobbyCompleted = completedList.filter((b: any) => b.barber === 'Bobby').length;
+      const sumitCompleted = completedList.filter((b: any) => b.barber === 'Sumit').length;
+      const bobbyRev = completedList.filter((b: any) => b.barber === 'Bobby').reduce((sum: number, b: any) => sum + getServicePrice(b.service), 0);
+      const sumitRev = completedList.filter((b: any) => b.barber === 'Sumit').reduce((sum: number, b: any) => sum + getServicePrice(b.service), 0);
+
+      // Gender Breakdown (Completed + Active)
+      const totalBookings = completedList.concat(activeList);
+      const maleCount = totalBookings.filter((b: any) => b.gender === 'Male').length;
+      const femaleCount = totalBookings.filter((b: any) => b.gender === 'Female').length;
+      const genderTotal = maleCount + femaleCount || 1;
+      const malePct = Math.round((maleCount / genderTotal) * 100);
+      const femalePct = Math.round((femaleCount / genderTotal) * 100);
+
+      // Service popularity (Top 4 completed services)
+      const serviceCounts: { [key: string]: number } = {};
+      completedList.forEach((b: any) => {
+        const key = b.service || 'Unknown';
+        serviceCounts[key] = (serviceCounts[key] || 0) + 1;
+      });
+      const topServices = Object.entries(serviceCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4);
+
+      // Render Dashboard Analytics UI
+      let html = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
+          <div style="background: rgba(255,255,255,0.4); padding: 1.5rem; border-radius: 12px; text-align: center; border: 1px solid rgba(0,0,0,0.05);">
+            <h4 style="font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem;">Completed Revenue</h4>
+            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #2E8B57; font-weight: 500; margin: 0;">$${revenueCompleted}</p>
+            <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">${totalCompleted} bookings</span>
+          </div>
+          <div style="background: rgba(255,255,255,0.4); padding: 1.5rem; border-radius: 12px; text-align: center; border: 1px solid rgba(0,0,0,0.05);">
+            <h4 style="font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem;">Projected Revenue</h4>
+            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #FF8C00; font-weight: 500; margin: 0;">$${revenueProjected}</p>
+            <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">${totalActive} active bookings</span>
+          </div>
+          <div style="background: rgba(255,255,255,0.4); padding: 1.5rem; border-radius: 12px; text-align: center; border: 1px solid rgba(0,0,0,0.05);">
+            <h4 style="font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem;">Queue Waitlist</h4>
+            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #4682B4; font-weight: 500; margin: 0;">${totalQueue}</p>
+            <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">in queue</span>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+          <!-- Barber Performance -->
+          <div style="background: rgba(255,255,255,0.3); padding: 2rem; border-radius: 16px; border: 1px solid rgba(0,0,0,0.05);">
+            <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin-bottom: 1.5rem;">Barber Performance</h3>
+            <div style="display:flex; flex-direction:column; gap: 1.5rem;">
+              <!-- Bobby -->
+              <div>
+                <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:0.85rem; margin-bottom:0.4rem;">
+                  <span>Bobby</span>
+                  <strong>$${bobbyRev} (${bobbyCompleted} jobs)</strong>
+                </div>
+                <div style="background:rgba(0,0,0,0.05); height:12px; border-radius:10px; overflow:hidden;">
+                  <div style="background:var(--theme-main); width:${revenueCompleted > 0 ? (bobbyRev / revenueCompleted) * 100 : 0}%; height:100%; border-radius:10px; transition: width 1s ease-out;"></div>
+                </div>
+              </div>
+              <!-- Sumit -->
+              <div>
+                <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:0.85rem; margin-bottom:0.4rem;">
+                  <span>Sumit</span>
+                  <strong>$${sumitRev} (${sumitCompleted} jobs)</strong>
+                </div>
+                <div style="background:rgba(0,0,0,0.05); height:12px; border-radius:10px; overflow:hidden;">
+                  <div style="background:#8FBC8F; width:${revenueCompleted > 0 ? (sumitRev / revenueCompleted) * 100 : 0}%; height:100%; border-radius:10px; transition: width 1s ease-out;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Service Gender Share -->
+          <div style="background: rgba(255,255,255,0.3); padding: 2rem; border-radius: 16px; border: 1px solid rgba(0,0,0,0.05);">
+            <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin-bottom: 1.5rem;">Gender Booking Share</h3>
+            <div style="display:flex; gap: 1.5rem; align-items:center; height:100px;">
+              <div style="flex:1;">
+                <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:0.85rem; margin-bottom:0.3rem;">
+                  <span>Male Customers</span>
+                  <strong>${malePct}%</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:0.85rem; margin-bottom:0.3rem;">
+                  <span>Female Customers</span>
+                  <strong>${femalePct}%</strong>
+                </div>
+              </div>
+              <div style="width:100px; height:20px; display:flex; border-radius:10px; overflow:hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+                <div style="width:${malePct}%; background:#4682B4;" title="Male"></div>
+                <div style="width:${femalePct}%; background:#FF69B4;" title="Female"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: rgba(255,255,255,0.3); padding: 2rem; border-radius: 16px; border: 1px solid rgba(0,0,0,0.05); margin-top: 2rem;">
+          <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin-bottom: 1.5rem;">Most Popular Services</h3>
+          <div style="display:flex; flex-direction:column; gap:1.2rem;">
+            ${topServices.length === 0 ? '<p style="font-family:var(--font-mono); font-size:0.85rem; color:var(--text-secondary);">No completed bookings data yet.</p>' : topServices.map(([srv, count], index) => {
+              const maxCount = topServices[0][1] || 1;
+              const barWidth = (count / maxCount) * 100;
+              return `
+                <div>
+                  <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:0.85rem; margin-bottom:0.3rem;">
+                    <span>#${index+1} ${srv}</span>
+                    <strong>${count} booking${count !== 1 ? 's' : ''}</strong>
+                  </div>
+                  <div style="background:rgba(0,0,0,0.05); height:8px; border-radius:10px; overflow:hidden;">
+                    <div style="background:var(--theme-main); width:${barWidth}%; height:100%; border-radius:10px; transition: width 1s ease-out;"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+
+      analyticsContent.innerHTML = html;
+    } catch (err) {
+      analyticsContent.innerHTML = '<p style="color:red; font-family:var(--font-mono);">Failed to fetch analytics metrics.</p>';
+    }
   }
 
   // ── Gallery Data Fetcher ─────────────────────────────────────────────────

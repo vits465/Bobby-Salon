@@ -172,6 +172,11 @@ app.get('/api/slots', async (req, res) => {
     const bookings = getBookingsCollection();
     const settings = getSettingsCollection();
 
+    const blockedDoc = await settings.findOne({ _id: 'blocked_dates' });
+    if (blockedDoc && blockedDoc.dates && blockedDoc.dates.includes(date)) {
+      return res.json({ date, slots: [], closed: true, message: 'Salon is closed on this date (Holiday/Weekly Off)' });
+    }
+
     const timingsDoc = await settings.findOne({ _id: 'timings' });
     const timings = timingsDoc || undefined;
 
@@ -322,7 +327,15 @@ app.get('/api/settings', async (req, res) => {
 app.post('/api/settings', async (req, res) => {
   try {
     const settings = getSettingsCollection();
-    const { _id, ...timingsData } = req.body;
+    const { weekday, saturday, sunday } = req.body;
+    if (!weekday || !saturday || !sunday) {
+      return res.status(400).json({ error: 'Missing timings configuration' });
+    }
+    const timingsData = {
+      weekday: { start: parseInt(weekday.start, 10), end: parseInt(weekday.end, 10) },
+      saturday: { start: parseInt(saturday.start, 10), end: parseInt(saturday.end, 10) },
+      sunday: { start: parseInt(sunday.start, 10), end: parseInt(sunday.end, 10) }
+    };
     await settings.updateOne(
       { _id: 'timings' },
       { $set: timingsData },
@@ -331,6 +344,47 @@ app.post('/api/settings', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Error saving settings:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/settings/blocked-dates
+app.get('/api/settings/blocked-dates', async (req, res) => {
+  try {
+    const settings = getSettingsCollection();
+    const doc = await settings.findOne({ _id: 'blocked_dates' });
+    res.json(doc ? doc.dates : []);
+  } catch (err) {
+    console.error('Error fetching blocked dates:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/settings/blocked-dates
+app.post('/api/settings/blocked-dates', async (req, res) => {
+  try {
+    const settings = getSettingsCollection();
+    const { action, date } = req.body;
+    if (!date) {
+      return res.status(400).json({ error: 'Date is required' });
+    }
+    if (action === 'add') {
+      await settings.updateOne(
+        { _id: 'blocked_dates' },
+        { $addToSet: { dates: date } },
+        { upsert: true }
+      );
+    } else if (action === 'remove') {
+      await settings.updateOne(
+        { _id: 'blocked_dates' },
+        { $pull: { dates: date } }
+      );
+    } else {
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error saving blocked date:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
