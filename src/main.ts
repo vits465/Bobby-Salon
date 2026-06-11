@@ -1066,8 +1066,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!video.src && video.dataset.src) {
                   video.src = video.dataset.src;
                   video.load();
-                  video.play().catch(() => {});
                 }
+                video.play().catch(() => {});
               } else {
                 // Pause off-screen videos to save resources
                 if (video.src) video.pause();
