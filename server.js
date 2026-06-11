@@ -43,6 +43,17 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
+// Ensure database is connected before handling any API request
+app.use('/api', async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('Database connection error in middleware:', err);
+    res.status(500).json({ error: 'Database connection failed. Please check backend logs or Environment Variables.' });
+  }
+});
+
 // In production: serve Vite-built static files from dist/
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {

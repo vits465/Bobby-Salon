@@ -11,6 +11,7 @@ if (!MONGODB_URI) {
 
 let client = null;
 let db = null;
+let connectionPromise = null;
 
 /**
  * Connect to MongoDB Atlas.
@@ -18,12 +19,17 @@ let db = null;
  */
 export async function connectDB() {
   if (db) return db;
+  if (connectionPromise) return connectionPromise;
 
-  client = new MongoClient(MONGODB_URI);
-  await client.connect();
-  db = client.db(MONGODB_DB);
-  console.log(`✅ Connected to MongoDB: ${MONGODB_DB}`);
-  return db;
+  connectionPromise = (async () => {
+    client = new MongoClient(MONGODB_URI);
+    await client.connect();
+    db = client.db(MONGODB_DB);
+    console.log(`✅ Connected to MongoDB: ${MONGODB_DB}`);
+    return db;
+  })();
+
+  return connectionPromise;
 }
 
 /**
