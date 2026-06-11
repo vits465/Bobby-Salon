@@ -257,18 +257,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (modal) {
           modal.innerHTML = `
             <div class="modal-content glassmorphism-dark" style="position: relative;">
-              <h2>Booking Locked!</h2>
-              <p style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1rem;">Please complete your booking by confirming via WhatsApp.</p>
-              <p style="font-size: 1.0rem; color: var(--theme-main); font-family: var(--font-mono); margin-bottom: 2rem; padding: 1rem; border: 1px solid var(--theme-main); border-radius: 8px;">⏳ Note: Please arrive at the salon 10-15 minutes before your appointment time (${time}).</p>
+              <h2 style="color: var(--theme-main); margin-bottom: 0.5rem;">Congratulations!</h2>
+              <h3 style="font-family: var(--font-sans); font-size: 1.3rem; margin-bottom: 1rem; font-weight: 600;">Your Booking is Successful!</h3>
+              <p style="font-size: 1.0rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Opening WhatsApp to confirm your slot... If it does not redirect automatically, please click below.</p>
+              <p style="font-size: 0.95rem; color: var(--theme-main); font-family: var(--font-mono); margin-bottom: 2rem; padding: 1rem; border: 1px solid var(--theme-main); border-radius: 8px;">⏳ Note: Please arrive at the salon 10-15 minutes before your appointment time (${time}).</p>
               <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
                 <button id="add-to-calendar-btn" class="hover-target" style="background: transparent; color: var(--theme-main); border: 1px solid var(--theme-main); padding: 12px 24px; border-radius: 40px; cursor: pointer; font-family: var(--font-mono); font-weight: bold;">+ ADD TO CALENDAR</button>
-                <a href="${whatsappUrl}" target="_blank" id="continue-wa-btn" class="hover-target" style="background: var(--theme-main); color: white; border: none; padding: 12px 24px; border-radius: 40px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; text-decoration: none;">CONTINUE TO WHATSAPP &rarr;</a>
+                <a href="${whatsappUrl}" target="_blank" id="continue-wa-btn" class="hover-target" style="background: var(--theme-main); color: white; border: none; padding: 12px 24px; border-radius: 40px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; text-decoration: none;">CONFIRM ON WHATSAPP &rarr;</a>
               </div>
             </div>
           `;
           modal.style.display = 'flex';
+
+          // Automatically redirect to WhatsApp after 2 seconds
+          const redirectTimeout = setTimeout(() => {
+            window.location.href = whatsappUrl;
+          }, 2000);
           
           document.getElementById('add-to-calendar-btn')?.addEventListener('click', () => {
+            clearTimeout(redirectTimeout);
             const startTime = new Date(`${date} ${time}`);
             const endTime = new Date(startTime.getTime() + 60*60*1000);
             
@@ -287,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
               `DESCRIPTION:Appointment for ${name} with ${barber}`,
               'END:VEVENT',
               'END:VCALENDAR'
-            ].join('\\n');
+            ].join('\n');
 
             const blob = new Blob([icsString], { type: 'text/calendar;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -300,6 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
           });
 
           document.getElementById('continue-wa-btn')?.addEventListener('click', () => {
+            clearTimeout(redirectTimeout);
             modal.style.display = 'none';
             fetchSlots(date);
             bookingForm.reset();
