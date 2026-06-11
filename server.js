@@ -28,9 +28,11 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
+    // Allow localhost, explicitly listed origins, and any Vercel deployment
     if (
       allowedOrigins.includes(origin) ||
-      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+      /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin)
     ) {
       return callback(null, true);
     }
