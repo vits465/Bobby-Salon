@@ -52,6 +52,11 @@ export function getDB() {
   return db;
 }
 
+export function getClient() {
+  if (!client) throw new Error('Database client not connected. Call connectDB() first.');
+  return client;
+}
+
 // Collection accessors
 export function getBookingsCollection() {
   return getDB().collection('bookings');
@@ -71,4 +76,8 @@ export function getGalleryOrderCollection() {
 
 export function getSettingsCollection() {
   return getDB().collection('settings');
+}
+
+export function getServicesCollection() {
+  return getDB().collection('services');
 }

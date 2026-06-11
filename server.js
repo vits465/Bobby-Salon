@@ -4,13 +4,15 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { timingSafeEqual } from 'crypto';
 dotenv.config();
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
-import { connectDB, getBookingsCollection, getCompletedCollection, getQueueCollection, getGalleryOrderCollection, getSettingsCollection } from './db.js';
+import { connectDB, getClient, getDB, getBookingsCollection, getCompletedCollection, getQueueCollection, getGalleryOrderCollection, getSettingsCollection, getServicesCollection } from './db.js';
 import { cloudinary, upload } from './cloudinaryConfig.js';
+import { ObjectId } from 'mongodb';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,14 +20,44 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (
+      allowedOrigins.includes(origin) ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+    ) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  }
+}));
+app.use(express.json({ limit: '1mb' }));
 
 // ─── Security Middlewares ────────────────────────────────────────────────────
 
 // Set security HTTP headers (disable CSP and COEP to prevent breaking Vite/YouTube/Cloudinary)
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com', 'https://*.cloudinary.com'],
+      mediaSrc: ["'self'", 'https://res.cloudinary.com', 'https://*.cloudinary.com'],
+      frameSrc: ['https://www.youtube.com'],
+      connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"]
+    }
+  },
   crossOriginEmbedderPolicy: false
 }));
 
@@ -33,13 +65,37 @@ app.use(helmet({
 function cleanInput(obj) {
   if (obj && typeof obj === 'object') {
     for (const key in obj) {
-      if (key.startsWith('$')) {
+      if (key.startsWith('$') || key.includes('.')) {
         delete obj[key];
       } else {
         cleanInput(obj[key]);
       }
     }
   }
+}
+
+function safeCompare(a, b) {
+  const aBuffer = Buffer.from(a);
+  const bBuffer = Buffer.from(b);
+  return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
+}
+
+function requireAdmin(req, res, next) {
+  const expected = process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN;
+  if (!expected) {
+    return res.status(503).json({ error: 'Admin access is not configured.' });
+  }
+
+  const authHeader = req.get('authorization') || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const headerToken = req.get('x-admin-password') || '';
+  const supplied = bearerToken || headerToken;
+
+  if (!supplied || !safeCompare(supplied, expected)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  next();
 }
 app.use((req, res, next) => {
   cleanInput(req.body);
@@ -57,6 +113,7 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', apiLimiter);
+app.use('/api/admin', requireAdmin);
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -126,8 +183,11 @@ const getAvailableSlots = (dateStr, timings) => {
   return slots;
 };
 
-const getDuration = (serviceName) => {
+const getDurationDynamic = (serviceName, servicesMap) => {
   if (!serviceName) return 60;
+  if (servicesMap && servicesMap.has(serviceName)) {
+    return servicesMap.get(serviceName).duration;
+  }
   const s = serviceName.toLowerCase();
   if (s.includes('4 hour')) return 240;
   if (s.includes('1 hour 20 min')) return 80;
@@ -139,6 +199,172 @@ const getDuration = (serviceName) => {
   if (s.includes('15 min')) return 15;
   return 60;
 };
+
+function isValidDateString(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function getIndiaNow() {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  return new Date(utc + (3600000 * 5.5));
+}
+
+function getIndiaDateString(date = getIndiaNow()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseSlotHour(time) {
+  const match = /^(\d{1,2}):(\d{2})\s?(AM|PM)$/i.exec(time || '');
+  if (!match) return null;
+
+  let hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return null;
+  if (period === 'PM' && hour !== 12) hour += 12;
+  if (period === 'AM' && hour === 12) hour = 0;
+  return { hour, minute };
+}
+
+function isPastSlot(dateStr, time) {
+  const indiaNow = getIndiaNow();
+  const today = getIndiaDateString(indiaNow);
+  if (dateStr < today) return true;
+  if (dateStr > today) return false;
+
+  const slot = parseSlotHour(time);
+  if (!slot) return true;
+  const slotTime = new Date(indiaNow);
+  slotTime.setHours(slot.hour, slot.minute, 0, 0);
+  return indiaNow > slotTime;
+}
+
+function validateObjectId(id) {
+  return ObjectId.isValid(id) ? new ObjectId(id) : null;
+}
+
+function httpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function normalizeServicePayload(body) {
+  const name = String(body.name || '').trim();
+  const gender = String(body.gender || '').trim();
+  const duration = Number.parseInt(body.duration, 10);
+  const price = Number.parseFloat(body.price);
+
+  if (name.length < 2 || name.length > 120) return null;
+  if (!['Male', 'Female'].includes(gender)) return null;
+  if (!Number.isInteger(duration) || duration < 5 || duration > 480) return null;
+  if (!Number.isFinite(price) || price < 0 || price > 100000) return null;
+
+  return { name, gender, duration, price };
+}
+
+function normalizeGalleryOrder(order) {
+  if (!Array.isArray(order) || order.length > 300) return null;
+
+  return order.map(item => {
+    const filename = String(item.filename || '').trim().slice(0, 180);
+    const url = String(item.url || '').trim();
+    const publicId = String(item.public_id || '').trim();
+    const resourceType = item.resource_type === 'video' ? 'video' : 'image';
+
+    if (!filename || !url || !publicId) return null;
+    if (!/^https?:\/\//i.test(url)) return null;
+    if (publicId.length > 240) return null;
+
+    return {
+      filename,
+      url,
+      public_id: publicId,
+      resource_type: resourceType
+    };
+  });
+}
+
+// CallMeBot Free WhatsApp Alerts helper
+const sendWhatsAppAlert = async (bookingDetails) => {
+  const apikey = process.env.CALLMEBOT_API_KEY;
+  const phone = process.env.ADMIN_PHONE;
+  if (!apikey || !phone) {
+    console.log("⚠️ CallMeBot credentials missing in .env. Skipping free WhatsApp alert.");
+    return;
+  }
+
+  const statusText = bookingDetails.isQueue ? 'WAITLIST QUEUE REQUEST' : 'NEW APPOINTMENT';
+  const msg = `*Bobby Salon - ${statusText}*\n\n` +
+              `👤 Name: ${bookingDetails.name}\n` +
+              `📞 Phone: ${bookingDetails.phone}\n` +
+              `🚻 Gender: ${bookingDetails.gender}\n` +
+              `💇 Service: ${bookingDetails.service}\n` +
+              `💈 Barber: ${bookingDetails.barber}\n` +
+              `📅 Date: ${bookingDetails.date}\n` +
+              `⏰ Time: ${bookingDetails.time}`;
+
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(msg)}&apikey=${encodeURIComponent(apikey)}`;
+  
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      console.log("✅ Free WhatsApp alert sent successfully to admin!");
+    } else {
+      console.error("❌ Failed to send WhatsApp alert via CallMeBot:", res.statusText);
+    }
+  } catch (err) {
+    console.error("❌ Error sending CallMeBot request:", err);
+  }
+};
+
+// Seed default services in DB if empty
+async function seedServicesIfNeeded() {
+  try {
+    const servicesCol = getServicesCollection();
+    const count = await servicesCol.countDocuments();
+    if (count === 0) {
+      const defaultServices = [
+        // Male
+        { name: "Haircut + Beard (40 Min)", gender: "Male", duration: 40, price: 110, active: true },
+        { name: "Only Haircut (25 Min)", gender: "Male", duration: 25, price: 65, active: true },
+        { name: "Only Beard (15 Min)", gender: "Male", duration: 15, price: 45, active: true },
+        { name: "Clean Shave (15 Min)", gender: "Male", duration: 15, price: 45, active: true },
+        { name: "Face Massage (30 Min)", gender: "Male", duration: 30, price: 50, active: true },
+        { name: "Face Cleanup (30 Min)", gender: "Male", duration: 30, price: 50, active: true },
+        { name: "Facial (1 Hour)", gender: "Male", duration: 60, price: 80, active: true },
+        { name: "Hydra Facial (1 Hour)", gender: "Male", duration: 60, price: 80, active: true },
+        { name: "Hair Color (45 Min)", gender: "Male", duration: 45, price: 70, active: true },
+        { name: "Haircut + Hair Color (1 Hour)", gender: "Male", duration: 60, price: 120, active: true },
+        // Female
+        { name: "Haircut (1 Hour)", gender: "Female", duration: 60, price: 65, active: true },
+        { name: "Hair Wash (30 Min)", gender: "Female", duration: 30, price: 30, active: true },
+        { name: "Hair Wash + Blow Dry (45 Min)", gender: "Female", duration: 45, price: 45, active: true },
+        { name: "Hair Color (1 Hour 20 Min)", gender: "Female", duration: 80, price: 70, active: true },
+        { name: "Hair Color Touch Up (1 Hour)", gender: "Female", duration: 60, price: 70, active: true },
+        { name: "Face Cleanup (30 Min)", gender: "Female", duration: 30, price: 50, active: true },
+        { name: "Facial (1 Hour)", gender: "Female", duration: 60, price: 80, active: true },
+        { name: "Hair Treatment (4 Hour)", gender: "Female", duration: 240, price: 80, active: true },
+        { name: "Hair Spa (1 Hour)", gender: "Female", duration: 60, price: 80, active: true }
+      ];
+      await servicesCol.insertMany(defaultServices);
+      console.log("🌱 Default services database seeded successfully!");
+    }
+  } catch (err) {
+    console.error("Failed to seed services:", err);
+  }
+}
 
 // ─── Rate Limiter ────────────────────────────────────────────────────────────
 
@@ -167,10 +393,14 @@ app.get('/api/slots', async (req, res) => {
   if (!date) {
     return res.status(400).json({ error: 'Date is required' });
   }
+  if (typeof date !== 'string' || !isValidDateString(date)) {
+    return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
+  }
 
   try {
     const bookings = getBookingsCollection();
     const settings = getSettingsCollection();
+    const servicesCol = getServicesCollection();
 
     const blockedDoc = await settings.findOne({ _id: 'blocked_dates' });
     if (blockedDoc && blockedDoc.dates && blockedDoc.dates.includes(date)) {
@@ -181,16 +411,11 @@ app.get('/api/slots', async (req, res) => {
     const timings = timingsDoc || undefined;
 
     const bookedForDate = await bookings.find({ date }).toArray();
+    const servicesList = await servicesCol.find({}).toArray();
+    const servicesMap = new Map(servicesList.map(s => [s.name, s]));
 
-    // Get current time in India (UTC+5.5) for timezone-independent slot calculations
-    const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const indiaNow = new Date(utc + (3600000 * 5.5));
-
-    const year = indiaNow.getFullYear();
-    const month = String(indiaNow.getMonth() + 1).padStart(2, '0');
-    const day = String(indiaNow.getDate()).padStart(2, '0');
-    const todayDateStr = `${year}-${month}-${day}`;
+    const indiaNow = getIndiaNow();
+    const todayDateStr = getIndiaDateString(indiaNow);
 
     const isToday = date === todayDateStr;
 
@@ -216,9 +441,16 @@ app.get('/api/slots', async (req, res) => {
 
       if (showSlot) {
         const slotBookings = bookedForDate.filter(s => s.time === time);
-        let bobbyTime = slotBookings.filter(s => s.barber === 'Bobby').reduce((sum, b) => sum + getDuration(b.service), 0);
-        let sumitTime = slotBookings.filter(s => s.barber === 'Sumit').reduce((sum, b) => sum + getDuration(b.service), 0);
-        let anyTime = slotBookings.filter(s => s.barber === 'Any Available').reduce((sum, b) => sum + getDuration(b.service), 0);
+        
+        let bobbyTime = 0;
+        let sumitTime = 0;
+        let anyTime = 0;
+        for (const b of slotBookings) {
+          const dur = getDurationDynamic(b.service, servicesMap);
+          if (b.barber === 'Bobby') bobbyTime += dur;
+          else if (b.barber === 'Sumit') sumitTime += dur;
+          else if (b.barber === 'Any Available') anyTime += dur;
+        }
 
         const totalTime = bobbyTime + sumitTime + anyTime;
         const isCompletelyFull = totalTime > 105;
@@ -244,66 +476,176 @@ app.get('/api/slots', async (req, res) => {
 // POST /api/book
 app.post('/api/book', bookingRateLimit, async (req, res) => {
   const { date, time, name, phone, gender, service, barber, isQueue } = req.body;
-  if (!date || !time || !name || !phone || !gender) {
+  if (!date || !time || !name || !phone || !gender || !service || !barber) {
     return res.status(400).json({ error: 'Missing required fields' });
+  }
+  if (!isValidDateString(date)) {
+    return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
   }
 
   try {
-    const bookings = getBookingsCollection();
-    const queueCol = getQueueCollection();
+    const normalizedName = String(name).trim();
+    const normalizedPhone = String(phone).replace(/\D/g, '');
+    const normalizedGender = String(gender);
+    const normalizedService = String(service);
+    const normalizedBarber = String(barber);
+    const queueRequested = Boolean(isQueue);
 
-    const bookingsForSlot = await bookings.find({ date, time }).toArray();
-
-    if (!isQueue) {
-      if (gender === 'Female') {
-        const hasFemale = bookingsForSlot.some(s => s.gender === 'Female');
-        if (hasFemale) {
-          return res.status(400).json({ error: 'Only one female appointment is available per slot.' });
-        }
-      }
-
-      const requestedDuration = getDuration(service);
-      let bobbyTime = bookingsForSlot.filter(s => s.barber === 'Bobby').reduce((sum, b) => sum + getDuration(b.service), 0);
-      let sumitTime = bookingsForSlot.filter(s => s.barber === 'Sumit').reduce((sum, b) => sum + getDuration(b.service), 0);
-      let anyTime = bookingsForSlot.filter(s => s.barber === 'Any Available').reduce((sum, b) => sum + getDuration(b.service), 0);
-
-      if (barber === 'Any Available') {
-        if (bobbyTime + sumitTime + anyTime + requestedDuration > 120) {
-          return res.status(400).json({ error: 'Not enough time available in this slot.' });
-        }
-      } else if (barber === 'Bobby') {
-        if (bobbyTime + requestedDuration > 60) {
-          return res.status(400).json({ error: `Bobby does not have enough time (${requestedDuration} mins needed) in this slot.` });
-        }
-        if (bobbyTime + sumitTime + anyTime + requestedDuration > 120) {
-          return res.status(400).json({ error: 'Not enough time available in this slot overall.' });
-        }
-      } else if (barber === 'Sumit') {
-        if (sumitTime + requestedDuration > 60) {
-          return res.status(400).json({ error: `Sumit does not have enough time (${requestedDuration} mins needed) in this slot.` });
-        }
-        if (bobbyTime + sumitTime + anyTime + requestedDuration > 120) {
-          return res.status(400).json({ error: 'Not enough time available in this slot overall.' });
-        }
-      }
-
-      await bookings.insertOne({
-        date, time, name, phone, gender, service, barber,
-        type: 'BOOKING',
-        createdAt: new Date().toISOString()
-      });
-    } else {
-      await queueCol.insertOne({
-        date, time, name, phone, gender, service, barber,
-        type: 'QUEUE',
-        createdAt: new Date().toISOString()
-      });
+    if (normalizedName.length < 2 || normalizedName.length > 80) {
+      return res.status(400).json({ error: 'Name must be between 2 and 80 characters.' });
+    }
+    if (!/^\d{10,15}$/.test(normalizedPhone)) {
+      return res.status(400).json({ error: 'Phone number must contain 10 to 15 digits.' });
+    }
+    if (!['Male', 'Female'].includes(normalizedGender)) {
+      return res.status(400).json({ error: 'Invalid gender.' });
+    }
+    if (!['Any Available', 'Bobby', 'Sumit'].includes(normalizedBarber)) {
+      return res.status(400).json({ error: 'Invalid barber selection.' });
+    }
+    if (normalizedGender === 'Female' && normalizedBarber !== 'Sumit') {
+      return res.status(400).json({ error: 'Female services must be booked with Sumit.' });
+    }
+    if (isPastSlot(date, time)) {
+      return res.status(400).json({ error: 'Cannot book a past time slot.' });
     }
 
-    res.json({ success: true, message: isQueue ? 'Added to queue' : 'Booking confirmed' });
+    const settings = getSettingsCollection();
+    const servicesCol = getServicesCollection();
+    const [blockedDoc, timingsDoc, serviceDoc] = await Promise.all([
+      settings.findOne({ _id: 'blocked_dates' }),
+      settings.findOne({ _id: 'timings' }),
+      servicesCol.findOne({ name: normalizedService, gender: normalizedGender, active: { $ne: false } })
+    ]);
+
+    if (blockedDoc && blockedDoc.dates && blockedDoc.dates.includes(date)) {
+      return res.status(400).json({ error: 'Salon is closed on this date.' });
+    }
+    if (!getAvailableSlots(date, timingsDoc || undefined).includes(time)) {
+      return res.status(400).json({ error: 'Invalid time slot for the selected date.' });
+    }
+    if (!serviceDoc) {
+      return res.status(400).json({ error: 'Invalid service for the selected gender.' });
+    }
+
+    const requestedDuration = Number(serviceDoc.duration) || getDurationDynamic(normalizedService);
+    if (!Number.isFinite(requestedDuration) || requestedDuration < 5 || requestedDuration > 480) {
+      return res.status(400).json({ error: 'Invalid service duration.' });
+    }
+
+    const bookingDetails = {
+      date,
+      time,
+      name: normalizedName,
+      phone: normalizedPhone,
+      gender: normalizedGender,
+      service: normalizedService,
+      barber: normalizedBarber,
+      isQueue: queueRequested
+    };
+
+    const client = getClient();
+    const session = client.startSession();
+    let responseMessage = queueRequested ? 'Added to queue' : 'Booking confirmed';
+
+    try {
+      await session.withTransaction(async () => {
+        const db = getDB();
+        const slotLocks = db.collection('bookingLocks');
+        const bookings = getBookingsCollection();
+        const queueCol = getQueueCollection();
+
+        await slotLocks.updateOne(
+          { _id: `${date}|${time}` },
+          {
+            $inc: { version: 1 },
+            $set: { updatedAt: new Date() }
+          },
+          { upsert: true, session }
+        );
+
+        const bookingsForSlot = await bookings.find({ date, time }, { session }).toArray();
+
+        if (!queueRequested) {
+          if (normalizedGender === 'Female') {
+            const hasFemale = bookingsForSlot.some(slot => slot.gender === 'Female');
+            if (hasFemale) {
+              throw httpError(400, 'Only one female appointment is available per slot.');
+            }
+          }
+
+          let bobbyTime = 0;
+          let sumitTime = 0;
+          let anyTime = 0;
+          for (const slot of bookingsForSlot) {
+            const duration = getDurationDynamic(slot.service);
+            if (slot.barber === 'Bobby') bobbyTime += duration;
+            else if (slot.barber === 'Sumit') sumitTime += duration;
+            else if (slot.barber === 'Any Available') anyTime += duration;
+          }
+
+          const totalBookedTime = bobbyTime + sumitTime + anyTime;
+          if (normalizedBarber === 'Any Available') {
+            if (totalBookedTime + requestedDuration > 120) {
+              throw httpError(400, 'Not enough time available in this slot.');
+            }
+          } else if (normalizedBarber === 'Bobby') {
+            if (bobbyTime + requestedDuration > 60) {
+              throw httpError(400, `Bobby does not have enough time (${requestedDuration} mins needed) in this slot.`);
+            }
+            if (totalBookedTime + requestedDuration > 120) {
+              throw httpError(400, 'Not enough time available in this slot overall.');
+            }
+          } else if (normalizedBarber === 'Sumit') {
+            if (sumitTime + requestedDuration > 60) {
+              throw httpError(400, `Sumit does not have enough time (${requestedDuration} mins needed) in this slot.`);
+            }
+            if (totalBookedTime + requestedDuration > 120) {
+              throw httpError(400, 'Not enough time available in this slot overall.');
+            }
+          }
+
+          await bookings.insertOne({
+            date,
+            time,
+            name: normalizedName,
+            phone: normalizedPhone,
+            gender: normalizedGender,
+            service: normalizedService,
+            barber: normalizedBarber,
+            type: 'BOOKING',
+            createdAt: new Date().toISOString()
+          }, { session });
+        } else {
+          await queueCol.insertOne({
+            date,
+            time,
+            name: normalizedName,
+            phone: normalizedPhone,
+            gender: normalizedGender,
+            service: normalizedService,
+            barber: normalizedBarber,
+            type: 'QUEUE',
+            createdAt: new Date().toISOString()
+          }, { session });
+        }
+      }, {
+        readConcern: { level: 'snapshot' },
+        writeConcern: { w: 'majority' },
+        readPreference: 'primary'
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    sendWhatsAppAlert(bookingDetails).catch(err => {
+      console.error("Failed to send WhatsApp alert:", err);
+    });
+
+    res.json({ success: true, message: responseMessage });
   } catch (err) {
     console.error('Error booking:', err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Server error' });
   }
 });
 
@@ -324,17 +666,31 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
-app.post('/api/settings', async (req, res) => {
+app.post('/api/settings', requireAdmin, async (req, res) => {
   try {
     const settings = getSettingsCollection();
     const { weekday, saturday, sunday } = req.body;
     if (!weekday || !saturday || !sunday) {
       return res.status(400).json({ error: 'Missing timings configuration' });
     }
+    const normalizeHours = (value) => {
+      const start = parseInt(value.start, 10);
+      const end = parseInt(value.end, 10);
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end > 23 || start >= end) {
+        return null;
+      }
+      return { start, end };
+    };
+    const normalizedWeekday = normalizeHours(weekday);
+    const normalizedSaturday = normalizeHours(saturday);
+    const normalizedSunday = normalizeHours(sunday);
+    if (!normalizedWeekday || !normalizedSaturday || !normalizedSunday) {
+      return res.status(400).json({ error: 'Invalid timing range.' });
+    }
     const timingsData = {
-      weekday: { start: parseInt(weekday.start, 10), end: parseInt(weekday.end, 10) },
-      saturday: { start: parseInt(saturday.start, 10), end: parseInt(saturday.end, 10) },
-      sunday: { start: parseInt(sunday.start, 10), end: parseInt(sunday.end, 10) }
+      weekday: normalizedWeekday,
+      saturday: normalizedSaturday,
+      sunday: normalizedSunday
     };
     await settings.updateOne(
       { _id: 'timings' },
@@ -361,12 +717,12 @@ app.get('/api/settings/blocked-dates', async (req, res) => {
 });
 
 // POST /api/settings/blocked-dates
-app.post('/api/settings/blocked-dates', async (req, res) => {
+app.post('/api/settings/blocked-dates', requireAdmin, async (req, res) => {
   try {
     const settings = getSettingsCollection();
     const { action, date } = req.body;
-    if (!date) {
-      return res.status(400).json({ error: 'Date is required' });
+    if (!date || !isValidDateString(date)) {
+      return res.status(400).json({ error: 'Valid date is required' });
     }
     if (action === 'add') {
       await settings.updateOne(
@@ -390,6 +746,78 @@ app.post('/api/settings/blocked-dates', async (req, res) => {
 });
 
 // ─── Gallery API (Cloudinary) ────────────────────────────────────────────────
+
+// ─── Services API (MongoDB) ──────────────────────────────────────────────────
+
+// GET /api/services
+app.get('/api/services', async (req, res) => {
+  try {
+    const servicesCol = getServicesCollection();
+    const services = await servicesCol.find({ active: { $ne: false } }).toArray();
+    res.json(services);
+  } catch (err) {
+    console.error('Error fetching services:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/admin/services
+app.post('/api/admin/services', async (req, res) => {
+  try {
+    const servicePayload = normalizeServicePayload(req.body);
+    if (!servicePayload) {
+      return res.status(400).json({ error: 'Invalid service fields' });
+    }
+    const servicesCol = getServicesCollection();
+    await servicesCol.insertOne({
+      ...servicePayload,
+      active: true
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error creating service:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/admin/services/:id
+app.put('/api/admin/services/:id', async (req, res) => {
+  try {
+    const id = validateObjectId(req.params.id);
+    const servicePayload = normalizeServicePayload(req.body);
+    if (!id) return res.status(400).json({ error: 'Invalid service id' });
+    if (!servicePayload) {
+      return res.status(400).json({ error: 'Invalid service fields' });
+    }
+    const servicesCol = getServicesCollection();
+    await servicesCol.updateOne(
+      { _id: id },
+      { $set: servicePayload }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating service:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/admin/services/:id
+app.delete('/api/admin/services/:id', async (req, res) => {
+  try {
+    const id = validateObjectId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid service id' });
+    const servicesCol = getServicesCollection();
+    // Soft delete
+    await servicesCol.updateOne(
+      { _id: id },
+      { $set: { active: false } }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting service:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // GET /api/gallery — returns gallery items with Cloudinary URLs
 app.get('/api/gallery', async (req, res) => {
@@ -624,6 +1052,7 @@ if (fs.existsSync(distPath)) {
 async function startServer() {
   try {
     await connectDB();
+    await seedServicesIfNeeded();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Bobby Salon Server running on http://localhost:${PORT}`);
     });
@@ -637,7 +1066,9 @@ if (!process.env.VERCEL) {
   startServer();
 } else {
   // In serverless environments, connect to DB but let Vercel handle the request wrapping
-  connectDB().catch(err => console.error('DB Connection Failed:', err));
+  connectDB()
+    .then(() => seedServicesIfNeeded())
+    .catch(err => console.error('DB Connection Failed:', err));
 }
 
 // Export for Vercel serverless deployment

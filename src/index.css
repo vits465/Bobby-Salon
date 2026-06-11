@@ -18,7 +18,12 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  cursor: none !important; /* Hide default cursor */
+}
+
+@media (hover: hover) {
+  * {
+    cursor: none !important; /* Hide default cursor */
+  }
 }
 
 html {
@@ -36,27 +41,34 @@ body {
 
 /* Custom Cursor — GPU-composited */
 .custom-cursor {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 12px;
-  height: 12px;
-  background-color: var(--accent);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 9999;
-  will-change: transform;
-  transition: width 0.2s, height 0.2s, background-color 0.2s, opacity 0.2s;
-  contain: layout style;
+  display: none;
 }
 
-.custom-cursor.hover {
-  width: 60px;
-  height: 60px;
-  background-color: var(--theme-main);
-  opacity: 0.15;
-  margin-left: -24px;
-  margin-top: -24px;
+@media (hover: hover) {
+  .custom-cursor {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 12px;
+    height: 12px;
+    background-color: var(--accent);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    will-change: transform;
+    transition: width 0.2s, height 0.2s, background-color 0.2s, opacity 0.2s;
+    contain: layout style;
+  }
+
+  .custom-cursor.hover {
+    width: 60px;
+    height: 60px;
+    background-color: var(--theme-main);
+    opacity: 0.15;
+    margin-left: -24px;
+    margin-top: -24px;
+  }
 }
 
 /* Ambient Glow */
@@ -144,7 +156,6 @@ a:hover {
   letter-spacing: -0.02em;
 }
 
-/* Navigation & Header */
 .sticky-header {
   position: fixed;
   top: 0;
@@ -158,6 +169,11 @@ a:hover {
   background: transparent;
   border-bottom: 1px solid transparent;
   transition: all var(--transition-fast);
+}
+
+body.menu-open .sticky-header {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .sticky-header.scrolled-header {
@@ -269,7 +285,7 @@ a:hover {
   max-width: 480px;
   height: 100vh;
   background-color: var(--bg-color);
-  z-index: 90;
+  z-index: 110;
   display: flex;
   flex-direction: column;
   opacity: 0;
@@ -294,7 +310,7 @@ a:hover {
   width: 100vw;
   height: 100vh;
   background: rgba(0, 0, 0, 0.35);
-  z-index: 89;
+  z-index: 105;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.3s;
@@ -799,6 +815,7 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 80vh;
 }
 
 .video-wrapper {
@@ -974,7 +991,7 @@ a:hover {
 
 .booking-form input:focus ~ label,
 .booking-form input:not(:placeholder-shown) ~ label,
-.static-label {
+.form-group label.static-label {
   top: -10px;
   font-size: 0.7rem;
   color: var(--theme-main);
@@ -1210,6 +1227,7 @@ a:hover {
   }
   .section-experience {
     padding: 6rem 2rem;
+    min-height: 70vh;
   }
   .video-wrapper {
     width: 85vw;
@@ -1330,6 +1348,7 @@ a:hover {
   /* Experience */
   .section-experience {
     padding: 4rem 1.5rem;
+    min-height: 60vh;
   }
   .video-wrapper {
     width: 95vw;
@@ -1486,6 +1505,9 @@ a:hover {
     margin-bottom: 1.8rem;
   }
 
+  .section-experience {
+    min-height: 50vh;
+  }
   .video-wrapper {
     width: 98vw;
     height: 35vh;
@@ -1554,4 +1576,250 @@ input:invalid:not(:placeholder-shown) {
 
 input:invalid:not(:placeholder-shown) ~ label {
   color: red !important;
+}
+
+/* ─── Services Catalog Section ─── */
+.section-services {
+  padding: 8rem 0;
+  background-color: var(--bg-color);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.services-header {
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto 5rem;
+}
+
+.services-intro {
+  font-family: var(--font-sans);
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  margin-top: 1.5rem;
+}
+
+.catalog-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3rem;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.catalog-filters {
+  display: flex;
+  gap: 1rem;
+}
+
+.filter-tab {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  padding: 0.6rem 1.8rem;
+  border-radius: 30px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--theme-main);
+  transition: all var(--transition-fast);
+}
+
+.filter-tab:hover, .filter-tab.active {
+  background: var(--theme-main);
+  color: #fff;
+  border-color: var(--theme-main);
+}
+
+.catalog-search-wrap input {
+  padding: 0.8rem 1.5rem;
+  border-radius: 30px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  background: rgba(255, 255, 255, 0.5);
+  width: 280px;
+  transition: all var(--transition-fast);
+}
+
+.catalog-search-wrap input:focus {
+  outline: none;
+  border-color: var(--theme-main);
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 2rem;
+}
+
+.service-card {
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 20px;
+  padding: 2.5rem 2rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: all var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.service-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(51, 75, 51, 0.15);
+}
+
+.service-card-top h3 {
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  color: var(--theme-main);
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+}
+
+.service-gender-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  background: rgba(51, 75, 51, 0.08);
+  color: var(--theme-main);
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+  letter-spacing: 0.05em;
+}
+
+.service-gender-tag.female {
+  background: rgba(180, 0, 100, 0.08);
+  color: oklch(50% 0.15 340);
+}
+
+.service-card-bottom {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.service-duration {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.service-price {
+  font-family: var(--font-serif);
+  font-size: 2.2rem;
+  color: var(--theme-main);
+  line-height: 1;
+}
+
+/* PWA App Install Banner */
+.pwa-install-banner {
+  position: fixed;
+  bottom: 2rem;
+  left: 2rem;
+  z-index: 1001;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0,0,0,0.1);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.12);
+  padding: 1.5rem 2rem;
+  border-radius: 16px;
+  max-width: 380px;
+  display: none;
+  align-items: center;
+  gap: 1.5rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: pwa-slide-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pwa-slide-in {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.pwa-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+}
+
+.pwa-info h4 {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  margin-bottom: 0.2rem;
+  color: var(--theme-main);
+}
+
+.pwa-info p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.pwa-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.pwa-btn {
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 30px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.pwa-btn.install {
+  background: var(--theme-main);
+  color: #fff;
+}
+
+.pwa-btn.dismiss {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid rgba(0,0,0,0.1);
+}
+
+.pwa-btn.install:hover {
+  transform: translateY(-2px);
+}
+
+/* Responsive Styles for Catalog */
+@media (max-width: 768px) {
+  .section-services {
+    padding: 5rem 0;
+  }
+  .catalog-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.5rem;
+  }
+  .catalog-filters {
+    justify-content: center;
+  }
+  .catalog-search-wrap input {
+    width: 100%;
+  }
+  .services-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  .pwa-install-banner {
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    max-width: none;
+    padding: 1.2rem;
+  }
 }

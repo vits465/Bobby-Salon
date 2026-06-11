@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import './index.css';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -64,65 +65,125 @@ document.addEventListener('DOMContentLoaded', () => {
   const serviceInput = document.getElementById('b-service') as HTMLSelectElement;
   const barberInput = document.getElementById('b-barber') as HTMLSelectElement;
 
-  const maleServices = [
-    "Haircut + Beard (40 Min)",
-    "Only Haircut (25 Min)",
-    "Only Beard (15 Min)",
-    "Clean Shave (15 Min)",
-    "Face Massage (30 Min)",
-    "Face Cleanup (30 Min)",
-    "Facial (1 Hour)",
-    "Hydra Facial (1 Hour)",
-    "Hair Color (45 Min)",
-    "Haircut + Hair Color (1 Hour)"
-  ];
+  let servicesList: any[] = [];
 
-  const femaleServices = [
-    "Haircut (1 Hour)",
-    "Hair Wash (30 Min)",
-    "Hair Wash + Blow Dry (45 Min)",
-    "Hair Color (1 Hour 20 Min)",
-    "Hair Color Touch Up (1 Hour)",
-    "Face Cleanup (30 Min)",
-    "Facial (1 Hour)",
-    "Hair Treatment (4 Hour)",
-    "Hair Spa (1 Hour)"
-  ];
+  const updateBookingServiceOptions = () => {
+    if (!genderInput || !serviceInput || !barberInput) return;
+    const gender = genderInput.value;
+    if (!gender) return;
 
-  if (genderInput && serviceInput && barberInput) {
-    genderInput.addEventListener('change', (e) => {
-      const gender = (e.target as HTMLSelectElement).value;
-      serviceInput.innerHTML = '<option value="" disabled selected>Select Service</option>';
-      serviceInput.disabled = false;
-      
-      let services: string[] = [];
-      if (gender === 'Male') {
-        services = maleServices;
-        barberInput.innerHTML = `
-          <option value="" disabled selected>Preferred Barber</option>
-          <option value="Any Available">Any Available</option>
-          <option value="Bobby">Bobby</option>
-          <option value="Sumit">Sumit</option>
-        `;
-      } else if (gender === 'Female') {
-        services = femaleServices;
-        barberInput.innerHTML = `
-          <option value="Sumit" selected>Sumit (Specialist)</option>
-        `;
-      }
+    serviceInput.innerHTML = '<option value="" disabled selected>Select Service</option>';
+    serviceInput.disabled = false;
 
-      services.forEach(service => {
-        const option = document.createElement('option');
-        option.value = service;
-        option.textContent = service;
-        serviceInput.appendChild(option);
-      });
-      
-      if (typeof (window as any).renderSlots === 'function') {
-        (window as any).renderSlots();
-      }
+    // Filter services from database by gender
+    const filtered = servicesList.filter(s => s.gender === gender);
+    filtered.forEach(s => {
+      const option = document.createElement('option');
+      option.value = s.name;
+      option.textContent = s.name;
+      serviceInput.appendChild(option);
     });
-  }
+
+    if (gender === 'Male') {
+      barberInput.innerHTML = `
+        <option value="" disabled selected>Preferred Barber</option>
+        <option value="Any Available">Any Available</option>
+        <option value="Bobby">Bobby</option>
+        <option value="Sumit">Sumit</option>
+      `;
+    } else if (gender === 'Female') {
+      barberInput.innerHTML = `
+        <option value="Sumit" selected>Sumit (Specialist)</option>
+      `;
+    }
+  };
+
+  // Attach change listener
+  genderInput?.addEventListener('change', () => {
+    updateBookingServiceOptions();
+    if (typeof (window as any).renderSlots === 'function') {
+      (window as any).renderSlots();
+    }
+  });
+
+  const renderServicesCatalog = () => {
+    const grid = document.getElementById('catalog-services-grid');
+    if (!grid) return;
+
+    grid.innerHTML = '';
+    const activeTab = document.querySelector('.filter-tab.active')?.getAttribute('data-filter') || 'all';
+    const searchQuery = (document.getElementById('catalog-search') as HTMLInputElement)?.value.toLowerCase() || '';
+
+    const filtered = servicesList.filter(s => {
+      const matchesTab = activeTab === 'all' || s.gender === activeTab;
+      const matchesSearch = s.name.toLowerCase().includes(searchQuery);
+      return matchesTab && matchesSearch;
+    });
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:var(--text-secondary);font-family:var(--font-mono);padding:2rem 0;">No services found matching your criteria.</p>`;
+      return;
+    }
+
+    filtered.forEach(s => {
+      const card = document.createElement('div');
+      card.className = 'service-card hover-expand hover-target';
+      
+      const genderClass = s.gender === 'Female' ? 'female' : 'male';
+      card.innerHTML = `
+        <div class="service-card-top">
+          <span class="service-gender-tag ${genderClass}">${escapeHtml(s.gender)}</span>
+          <h3>${escapeHtml(s.name)}</h3>
+        </div>
+        <div class="service-card-bottom">
+          <span class="service-duration">${escapeHtml(s.duration)} MIN</span>
+          <span class="service-price">$${escapeHtml(s.price)}</span>
+        </div>
+      `;
+
+      // Click to book shortcut
+      card.addEventListener('click', () => {
+        const bookingSection = document.getElementById('booking');
+        if (bookingSection) {
+          bookingSection.scrollIntoView({ behavior: 'smooth' });
+          if (genderInput && serviceInput) {
+            genderInput.value = s.gender;
+            updateBookingServiceOptions();
+            serviceInput.value = s.name;
+            if (typeof (window as any).renderSlots === 'function') {
+              (window as any).renderSlots();
+            }
+          }
+        }
+      });
+
+      grid.appendChild(card);
+    });
+
+    // Re-attach custom cursor hover
+    const cursor = document.querySelector('.custom-cursor');
+    if (cursor) {
+      grid.querySelectorAll('.hover-target').forEach(target => {
+        target.addEventListener('mouseenter', () => cursor.classList.add('hover'));
+        target.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
+      });
+    }
+  };
+
+  const fetchServices = async () => {
+    try {
+      const res = await fetch('/api/services');
+      servicesList = await res.json();
+      renderServicesCatalog();
+      updateBookingServiceOptions();
+      // If admin is active, render services table
+      if (window.location.hash === '#admin') {
+        fetchAdminServicesData();
+      }
+    } catch (err) {
+      console.error("Failed to load services:", err);
+    }
+  };
 
   // Set today's date as default
   if (dateInput) {
@@ -198,7 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       currentSlotsData = data.slots;
       renderSlots();
-    } catch (error) {
+    } catch {
       timeSlotGrid.innerHTML = '<p style="grid-column: 1/-1; color: red;">Failed to load slots. Is the backend running?</p>';
     }
   };
@@ -334,7 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-      } catch (err) {
+      } catch {
         alert('Server error while booking.');
         submitBtn.disabled = false;
         submitBtn.innerHTML = 'BOOK VIA WHATSAPP &rarr;';
@@ -352,12 +413,14 @@ document.addEventListener('DOMContentLoaded', () => {
   function openMenu() {
     fullscreenMenu.classList.add('active');
     menuBackdrop?.classList.add('active');
+    document.body.classList.add('menu-open');
     document.body.style.overflow = 'hidden';
   }
 
   function closeMenu() {
     fullscreenMenu.classList.remove('active');
     menuBackdrop?.classList.remove('active');
+    document.body.classList.remove('menu-open');
     document.body.style.overflow = '';
   }
 
@@ -475,27 +538,66 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  let adminPassword = sessionStorage.getItem('adminPassword') || '';
+
+  const authFetch = async (url: string, options: RequestInit = {}) => {
+    const headers = new Headers(options.headers || {});
+    if (adminPassword) {
+      headers.set('Authorization', `Bearer ${adminPassword}`);
+    }
+    return fetch(url, { ...options, headers });
+  };
+
+  const escapeHtml = (str: string): string => {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
   let adminRefreshInterval: any = null;
 
-  const checkAdmin = () => {
+  const checkAdmin = async () => {
     if (window.location.hash === '#admin') {
       const isLocalBypass = window.location.hostname === 'localhost' && window.location.search.includes('bypass=1');
-      const pwd = isLocalBypass ? 'bobby123' : prompt("Enter Admin Password:");
-      if (pwd === "bobby123") {
-        renderAdminDashboard();
-        // Auto-refresh every 10 seconds
-        if (!adminRefreshInterval) {
-          adminRefreshInterval = setInterval(() => {
-            if (window.location.hash === '#admin') {
-              fetchAdminData();
-            } else {
-              clearInterval(adminRefreshInterval);
-              adminRefreshInterval = null;
-            }
-          }, 10000);
+      let pwd = adminPassword;
+      if (!pwd) {
+        pwd = isLocalBypass ? 'bobby123' : (prompt("Enter Admin Password:") || '');
+      }
+      if (!pwd) {
+        window.location.hash = '';
+        return;
+      }
+      try {
+        const testHeaders = new Headers();
+        testHeaders.set('Authorization', `Bearer ${pwd}`);
+        const res = await fetch('/api/admin/bookings', { headers: testHeaders });
+        if (res.ok) {
+          adminPassword = pwd;
+          sessionStorage.setItem('adminPassword', pwd);
+          renderAdminDashboard();
+          // Auto-refresh every 10 seconds
+          if (!adminRefreshInterval) {
+            adminRefreshInterval = setInterval(() => {
+              if (window.location.hash === '#admin') {
+                fetchAdminData();
+              } else {
+                clearInterval(adminRefreshInterval);
+                adminRefreshInterval = null;
+              }
+            }, 10000);
+          }
+        } else {
+          alert("Incorrect password or unauthorized");
+          sessionStorage.removeItem('adminPassword');
+          adminPassword = '';
+          window.location.hash = '';
         }
-      } else {
-        alert("Incorrect password");
+      } catch {
+        alert("Network error while logging in");
         window.location.hash = '';
       }
     } else {
@@ -516,9 +618,13 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('hashchange', checkAdmin);
   checkAdmin();
 
-  // Helper to calculate estimated price for services
+  // Helper to calculate estimated price for services from DB
   const getServicePrice = (serviceName: string) => {
     if (!serviceName) return 0;
+    const found = servicesList.find(s => s.name === serviceName);
+    if (found) return found.price;
+    
+    // Fallback parser if not found
     const s = serviceName.toLowerCase();
     if (s.includes('haircut + beard')) return 110;
     if (s.includes('haircut + hair color')) return 120;
@@ -530,12 +636,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (s.includes('color')) return 70;
     if (s.includes('wash') && s.includes('dry')) return 45;
     if (s.includes('wash')) return 30;
-    return 50; // Default price
+    return 50;
   };
 
   async function fetchAdminData() {
     try {
-      const res = await fetch('/api/admin/bookings');
+      const res = await authFetch('/api/admin/bookings');
       const data = await res.json();
       
       const todayStr = new Date().toISOString().split('T')[0];
@@ -637,12 +743,12 @@ document.addEventListener('DOMContentLoaded', () => {
                  
       data.bookedSlots.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime() || a.time.localeCompare(b.time));
       data.bookedSlots.forEach((b: any) => {
-        html += `<tr class="admin-table-row" data-search="${b.name.toLowerCase()} ${b.phone}" style="border-bottom: 1px solid rgba(0,0,0,0.1); transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.5)'" onmouseout="this.style.background='transparent'">
-        <td style="padding: 1rem;">${b.date}</td><td style="padding: 1rem;"><strong>${b.time}</strong></td><td style="padding: 1rem;">${b.name}</td>
-        <td style="padding: 1rem;">${b.phone}</td><td style="padding: 1rem;">${b.service}</td><td style="padding: 1rem;">${b.barber || 'N/A'}</td>
+        html += `<tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)}" style="border-bottom: 1px solid rgba(0,0,0,0.1); transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.5)'" onmouseout="this.style.background='transparent'">
+        <td style="padding: 1rem;">${escapeHtml(b.date)}</td><td style="padding: 1rem;"><strong>${escapeHtml(b.time)}</strong></td><td style="padding: 1rem;">${escapeHtml(b.name)}</td>
+        <td style="padding: 1rem;">${escapeHtml(b.phone)}</td><td style="padding: 1rem;">${escapeHtml(b.service)}</td><td style="padding: 1rem;">${escapeHtml(b.barber || 'N/A')}</td>
         <td style="padding: 1rem;">
-          <button class="admin-action-btn hover-target" data-action="complete" data-id="${b.createdAt}" style="background: var(--theme-main); color: white; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; margin-right: 5px; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Complete</button>
-          <button class="admin-action-btn hover-target" data-action="delete" data-id="${b.createdAt}" style="background: transparent; color: red; border: 1px solid red; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>
+          <button class="admin-action-btn hover-target" data-action="complete" data-id="${escapeHtml(b.createdAt)}" style="background: var(--theme-main); color: white; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; margin-right: 5px; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Complete</button>
+          <button class="admin-action-btn hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}" style="background: transparent; color: red; border: 1px solid red; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>
         </td></tr>`;
       });
       html += '</table></div>';
@@ -652,12 +758,12 @@ document.addEventListener('DOMContentLoaded', () => {
                  '<tr style="border-bottom: 2px solid var(--theme-main); color: var(--theme-main); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase;">' +
                  '<th style="padding: 1rem;">Date</th><th style="padding: 1rem;">Time</th><th style="padding: 1rem;">Name</th><th style="padding: 1rem;">Phone</th><th style="padding: 1rem;">Service</th><th style="padding: 1rem;">Barber</th><th style="padding: 1rem;">Actions</th></tr>';
       data.queue.forEach((b: any) => {
-        html += `<tr class="admin-table-row" data-search="${b.name.toLowerCase()} ${b.phone}" style="border-bottom: 1px solid rgba(0,0,0,0.1); transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.5)'" onmouseout="this.style.background='transparent'">
-        <td style="padding: 1rem;">${b.date}</td><td style="padding: 1rem;"><strong>${b.time}</strong></td><td style="padding: 1rem;">${b.name}</td>
-        <td style="padding: 1rem;">${b.phone}</td><td style="padding: 1rem;">${b.service}</td><td style="padding: 1rem;">${b.barber || 'N/A'}</td>
+        html += `<tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)}" style="border-bottom: 1px solid rgba(0,0,0,0.1); transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.5)'" onmouseout="this.style.background='transparent'">
+        <td style="padding: 1rem;">${escapeHtml(b.date)}</td><td style="padding: 1rem;"><strong>${escapeHtml(b.time)}</strong></td><td style="padding: 1rem;">${escapeHtml(b.name)}</td>
+        <td style="padding: 1rem;">${escapeHtml(b.phone)}</td><td style="padding: 1rem;">${escapeHtml(b.service)}</td><td style="padding: 1rem;">${escapeHtml(b.barber || 'N/A')}</td>
         <td style="padding: 1rem;">
-          <button class="admin-action-btn hover-target" data-action="approve" data-id="${b.createdAt}" style="background: transparent; color: var(--theme-main); border: 1px solid var(--theme-main); padding: 8px 16px; border-radius: 20px; cursor: pointer; margin-right: 5px; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Approve</button>
-          <button class="admin-action-btn hover-target" data-action="delete" data-id="${b.createdAt}" style="background: transparent; color: red; border: 1px solid red; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>
+          <button class="admin-action-btn hover-target" data-action="approve" data-id="${escapeHtml(b.createdAt)}" style="background: transparent; color: var(--theme-main); border: 1px solid var(--theme-main); padding: 8px 16px; border-radius: 20px; cursor: pointer; margin-right: 5px; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Approve</button>
+          <button class="admin-action-btn hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}" style="background: transparent; color: red; border: 1px solid red; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>
         </td></tr>`;
       });
       html += '</table></div>';
@@ -668,9 +774,9 @@ document.addEventListener('DOMContentLoaded', () => {
                  '<th style="padding: 1rem;">Date</th><th style="padding: 1rem;">Time</th><th style="padding: 1rem;">Name</th><th style="padding: 1rem;">Phone</th><th style="padding: 1rem;">Service</th><th style="padding: 1rem;">Barber</th></tr>';
       data.completedSlots.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime() || a.time.localeCompare(b.time));
       data.completedSlots.forEach((b: any) => {
-        html += `<tr class="admin-table-row" data-search="${b.name.toLowerCase()} ${b.phone}" style="border-bottom: 1px solid rgba(0,0,0,0.1); transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.5)'" onmouseout="this.style.background='transparent'">
-        <td style="padding: 1rem;">${b.date}</td><td style="padding: 1rem;"><strong>${b.time}</strong></td><td style="padding: 1rem;">${b.name}</td>
-        <td style="padding: 1rem;">${b.phone}</td><td style="padding: 1rem;">${b.service}</td><td style="padding: 1rem;">${b.barber || 'N/A'}</td>
+        html += `<tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)}" style="border-bottom: 1px solid rgba(0,0,0,0.1); transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.5)'" onmouseout="this.style.background='transparent'">
+        <td style="padding: 1rem;">${escapeHtml(b.date)}</td><td style="padding: 1rem;"><strong>${escapeHtml(b.time)}</strong></td><td style="padding: 1rem;">${escapeHtml(b.name)}</td>
+        <td style="padding: 1rem;">${escapeHtml(b.phone)}</td><td style="padding: 1rem;">${escapeHtml(b.service)}</td><td style="padding: 1rem;">${escapeHtml(b.barber || 'N/A')}</td>
         </tr>`;
       });
       html += '</table></div>';
@@ -726,10 +832,10 @@ document.addEventListener('DOMContentLoaded', () => {
           mbGender.addEventListener('change', () => {
             const gender = mbGender.value;
             mbService.innerHTML = '<option value="" disabled selected>Select Service</option>';
-            const services = gender === 'Male' ? maleServices : femaleServices;
-            services.forEach(s => {
+            const filtered = servicesList.filter((s: any) => s.gender === gender);
+            filtered.forEach((s: any) => {
               const opt = document.createElement('option');
-              opt.value = s; opt.textContent = s;
+              opt.value = s.name; opt.textContent = s.name;
               mbService.appendChild(opt);
             });
             if (gender === 'Female') {
@@ -800,7 +906,7 @@ document.addEventListener('DOMContentLoaded', () => {
           });
         }
       }
-    } catch (e) {
+    } catch {
       const adminContentDiv = document.getElementById('admin-content');
       if (adminContentDiv) adminContentDiv.innerHTML = '<p style="color:red; font-family: var(--font-mono);">Error loading data</p>';
     }
@@ -831,6 +937,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <!-- Tabs -->
           <div style="display: flex; gap: 0; margin-bottom: 3rem; border-bottom: 2px solid rgba(0,0,0,0.08); flex-wrap: wrap;">
             <button id="tab-bookings" onclick="window._adminTab('bookings')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2rem; background: var(--theme-main); color: white; border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">📋 Bookings</button>
+            <button id="tab-services" onclick="window._adminTab('services')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2rem; background: rgba(0,0,0,0.05); color: var(--text-secondary); border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">💈 Services</button>
             <button id="tab-analytics" onclick="window._adminTab('analytics')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2rem; background: rgba(0,0,0,0.05); color: var(--text-secondary); border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">📊 Analytics</button>
             <button id="tab-gallery" onclick="window._adminTab('gallery')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2rem; background: rgba(0,0,0,0.05); color: var(--text-secondary); border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">🖼 Gallery</button>
             <button id="tab-settings" onclick="window._adminTab('settings')" style="font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 1rem 2rem; background: rgba(0,0,0,0.05); color: var(--text-secondary); border: none; cursor: none; border-radius: 8px 8px 0 0; transition: all 0.3s;">⚙ Settings</button>
@@ -841,6 +948,69 @@ document.addEventListener('DOMContentLoaded', () => {
             <div id="admin-content" class="glassmorphism-dark">
               <div class="spinner"></div>
               <p style="text-align: center; margin-top: 1rem; font-family: var(--font-mono); color: var(--theme-main);">Loading data...</p>
+            </div>
+          </div>
+
+          <!-- Services Panel -->
+          <div id="panel-services" style="display:none;">
+            <div class="glassmorphism-dark" style="margin-bottom: 2rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+                <h2 style="font-family: var(--font-serif); font-size: 2rem; color: var(--theme-main); margin: 0;">Manage Services</h2>
+                <button id="admin-add-service-btn" class="hover-target" style="background: var(--theme-main); color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; text-transform: uppercase;">+ Add Service</button>
+              </div>
+              
+              <!-- Add/Edit Service Form -->
+              <div id="admin-service-form-wrap" class="glassmorphism-dark" style="display: none; margin-bottom: 2rem;">
+                <h3 id="admin-service-form-title" style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin-bottom: 1.5rem;">Add New Service</h3>
+                <form id="admin-service-form">
+                  <input type="hidden" id="as-id" />
+                  <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                    <div style="flex: 2; min-width: 200px;">
+                      <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">SERVICE NAME</label>
+                      <input type="text" id="as-name" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);" placeholder="e.g. Signature Fade" />
+                    </div>
+                    <div style="flex: 1; min-width: 120px;">
+                      <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">GENDER</label>
+                      <select id="as-gender" required style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);">
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                    <div style="flex: 1;">
+                      <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">DURATION (MINUTES)</label>
+                      <input type="number" id="as-duration" required min="5" max="300" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);" placeholder="30" />
+                    </div>
+                    <div style="flex: 1;">
+                      <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">PRICE ($)</label>
+                      <input type="number" id="as-price" required min="1" step="0.01" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);" placeholder="50" />
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 1rem;">
+                    <button type="submit" style="background: var(--theme-main); color: white; border: none; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; text-transform: uppercase;">Save Service</button>
+                    <button type="button" id="admin-service-form-cancel-btn" style="background: transparent; color: var(--text-secondary); border: 1px solid rgba(0,0,0,0.2); padding: 10px 20px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-weight: bold; text-transform: uppercase;">Cancel</button>
+                  </div>
+                </form>
+              </div>
+
+              <!-- Services Table -->
+              <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                  <thead>
+                    <tr style="border-bottom: 2px solid var(--theme-main); color: var(--theme-main); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase;">
+                      <th style="padding: 1rem;">Name</th>
+                      <th style="padding: 1rem;">Gender</th>
+                      <th style="padding: 1rem;">Duration</th>
+                      <th style="padding: 1rem;">Price</th>
+                      <th style="padding: 1rem;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-services-table-body">
+                    <!-- Dynamic Rows -->
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -944,23 +1114,22 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       `;
 
-      // Tab switcher — Gallery tab is password-protected
-      let galleryUnlocked = false;
-      const GALLERY_PASSWORD = 'Adii@465';
-
+      // Tab switcher
       (window as any)._adminTab = (tab: string) => {
         const bPanel = document.getElementById('panel-bookings')!;
+        const svPanel = document.getElementById('panel-services')!;
         const aPanel = document.getElementById('panel-analytics')!;
         const gPanel = document.getElementById('panel-gallery')!;
         const sPanel = document.getElementById('panel-settings')!;
         
         const bTab   = document.getElementById('tab-bookings')!;
+        const svTab  = document.getElementById('tab-services')!;
         const aTab   = document.getElementById('tab-analytics')!;
         const gTab   = document.getElementById('tab-gallery')!;
         const sTab   = document.getElementById('tab-settings')!;
 
-        const panels = [bPanel, aPanel, gPanel, sPanel];
-        const tabs = [bTab, aTab, gTab, sTab];
+        const panels = [bPanel, svPanel, aPanel, gPanel, sPanel];
+        const tabs = [bTab, svTab, aTab, gTab, sTab];
 
         panels.forEach(p => { if (p) p.style.display = 'none'; });
         tabs.forEach(t => {
@@ -974,6 +1143,10 @@ document.addEventListener('DOMContentLoaded', () => {
           if (bPanel) bPanel.style.display = '';
           if (bTab) { bTab.style.background = 'var(--theme-main)'; bTab.style.color = 'white'; }
           fetchAdminData();
+        } else if (tab === 'services') {
+          if (svPanel) svPanel.style.display = '';
+          if (svTab) { svTab.style.background = 'var(--theme-main)'; svTab.style.color = 'white'; }
+          fetchAdminServicesData();
         } else if (tab === 'analytics') {
           if (aPanel) aPanel.style.display = '';
           if (aTab) { aTab.style.background = 'var(--theme-main)'; aTab.style.color = 'white'; }
@@ -983,37 +1156,17 @@ document.addEventListener('DOMContentLoaded', () => {
           if (sTab) { sTab.style.background = 'var(--theme-main)'; sTab.style.color = 'white'; }
           fetchSettingsData();
         } else if (tab === 'gallery') {
-          if (!galleryUnlocked) {
-            const isLocalBypass = window.location.hostname === 'localhost' && window.location.search.includes('bypass=1');
-            const pwd = isLocalBypass ? 'Adii@465' : prompt('🔒 Enter Gallery Password:');
-            if (pwd === null) {
-              (window as any)._adminTab('bookings');
-              return;
-            }
-            if (pwd !== GALLERY_PASSWORD) {
-              gTab.style.background = '#dc3545';
-              gTab.style.color = 'white';
-              gTab.animate([
-                { transform: 'translateX(0)' },
-                { transform: 'translateX(-6px)' },
-                { transform: 'translateX(6px)' },
-                { transform: 'translateX(-4px)' },
-                { transform: 'translateX(4px)' },
-                { transform: 'translateX(0)' }
-              ], { duration: 400, easing: 'ease-in-out' });
-              setTimeout(() => {
-                gTab.style.background = 'rgba(0,0,0,0.05)';
-                gTab.style.color = 'var(--text-secondary)';
-              }, 600);
-              alert('❌ Incorrect password.');
-              (window as any)._adminTab('bookings');
-              return;
-            }
-            galleryUnlocked = true;
+          const GALLERY_PASSWORD = 'Adii@465';
+          const isLocalBypass = window.location.hostname === 'localhost' && window.location.search.includes('bypass=1');
+          const pwd = isLocalBypass ? GALLERY_PASSWORD : prompt('🔒 Enter Gallery Password:');
+          if (pwd === GALLERY_PASSWORD) {
+            if (gPanel) gPanel.style.display = '';
+            if (gTab) { gTab.style.background = 'var(--theme-main)'; gTab.style.color = 'white'; }
+            fetchGalleryData();
+          } else {
+            alert('❌ Access denied.');
+            (window as any)._adminTab('bookings');
           }
-          if (gPanel) gPanel.style.display = '';
-          if (gTab) { gTab.style.background = 'var(--theme-main)'; gTab.style.color = 'white'; }
-          fetchGalleryData();
         }
       };
 
@@ -1041,7 +1194,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
           bar.style.width = '40%';
-          const res = await fetch('/api/admin/gallery/upload', { method: 'POST', body: formData });
+          const res = await authFetch('/api/admin/gallery/upload', { method: 'POST', body: formData });
           bar.style.width = '80%';
           const data = await res.json();
           if (res.ok) {
@@ -1070,7 +1223,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!confirm(`Delete "${filename}" from portfolio?`)) return;
           target.textContent = '…';
           target.style.opacity = '0.5';
-          const res = await fetch(`/api/admin/gallery/${encodeURIComponent(publicId)}`, { method: 'DELETE' });
+          const res = await authFetch(`/api/admin/gallery/${encodeURIComponent(publicId)}`, { method: 'DELETE' });
           if (res.ok) { fetchGalleryData(); }
           else { alert('Delete failed'); target.textContent = 'Delete'; target.style.opacity = '1'; }
           return;
@@ -1083,7 +1236,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const ext = filename.split('.').pop();
           const newName = prompt(`Rename "${filename}" to:`, filename.replace(`.${ext}`, ''));
           if (!newName) return;
-          const res = await fetch(`/api/admin/gallery/${encodeURIComponent(publicId)}`, {
+          const res = await authFetch(`/api/admin/gallery/${encodeURIComponent(publicId)}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ newName: `${newName}.${ext}` })
@@ -1104,7 +1257,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (action === 'approve') { url = `/api/admin/queue/${id}/approve`; }
         target.textContent = '…'; target.style.opacity = '0.5';
         try {
-          const res = await fetch(url, { method });
+          const res = await authFetch(url, { method });
           if (res.ok) fetchAdminData(); else { alert('Action failed'); fetchAdminData(); }
         } catch { alert('Network error'); fetchAdminData(); }
       });
@@ -1122,7 +1275,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const sunEnd = (document.getElementById('settings-sun-end') as HTMLSelectElement).value;
 
           try {
-            const res = await fetch('/api/settings', {
+            const res = await authFetch('/api/settings', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1153,7 +1306,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!date) return;
 
           try {
-            const res = await fetch('/api/settings/blocked-dates', {
+            const res = await authFetch('/api/settings/blocked-dates', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ action: 'add', date })
@@ -1181,7 +1334,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const isBypass = window.location.search.includes('bypass=1');
             if (!date || (!isBypass && !confirm(`Unblock appointments for ${date}?`))) return;
             try {
-              const res = await fetch('/api/settings/blocked-dates', {
+              const res = await authFetch('/api/settings/blocked-dates', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'remove', date })
@@ -1291,7 +1444,7 @@ document.addEventListener('DOMContentLoaded', () => {
     analyticsContent.innerHTML = '<div class="spinner"></div><p style="text-align: center; margin-top: 1rem; font-family: var(--font-mono); color: var(--theme-main);">Loading metrics...</p>';
 
     try {
-      const res = await fetch('/api/admin/bookings');
+      const res = await authFetch('/api/admin/bookings');
       const data = await res.json();
 
       const activeList = data.bookedSlots || [];
@@ -1331,7 +1484,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .slice(0, 4);
 
       // Render Dashboard Analytics UI
-      let html = `
+      const html = `
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
           <div style="background: rgba(255,255,255,0.4); padding: 1.5rem; border-radius: 12px; text-align: center; border: 1px solid rgba(0,0,0,0.05);">
             <h4 style="font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem;">Completed Revenue</h4>
@@ -1409,7 +1562,7 @@ document.addEventListener('DOMContentLoaded', () => {
               return `
                 <div>
                   <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:0.85rem; margin-bottom:0.3rem;">
-                    <span>#${index+1} ${srv}</span>
+                    <span>#${index + 1} ${srv}</span>
                     <strong>${count} booking${count !== 1 ? 's' : ''}</strong>
                   </div>
                   <div style="background:rgba(0,0,0,0.05); height:8px; border-radius:10px; overflow:hidden;">
@@ -1423,7 +1576,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
 
       analyticsContent.innerHTML = html;
-    } catch (err) {
+    } catch {
       analyticsContent.innerHTML = '<p style="color:red; font-family:var(--font-mono);">Failed to fetch analytics metrics.</p>';
     }
   }
@@ -1447,10 +1600,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Store current order in memory
-      let currentOrder = [...files];
+      const currentOrder = [...files];
 
       const saveOrder = async () => {
-        await fetch('/api/admin/gallery/order', {
+        await authFetch('/api/admin/gallery/order', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ order: currentOrder })
@@ -1639,7 +1792,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return items.map((item: any) => {
               const src = item.url;
               const isVideo = item.resource_type === 'video' || ['mp4', 'webm'].includes((item.filename || '').split('.').pop()?.toLowerCase() || '');
-              // Videos use data-src for lazy loading — loaded by IntersectionObserver
               const content = isVideo 
                 ? `<video data-src="${src}" loop muted playsinline preload="none" poster="" style="background:#e8e8e0;"></video>`
                 : `<img src="${src}" alt="Bobby Salon Work" loading="lazy" />`;
@@ -1649,10 +1801,8 @@ document.addEventListener('DOMContentLoaded', () => {
           };
           
           const itemsHTML = generateItemsHTML();
-          // Only duplicate 2x (not 4x) — halves DOM load
           sliderTrack.innerHTML = itemsHTML + itemsHTML;
 
-          // Lazy-load videos when they enter the viewport
           const videoObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
               const video = entry.target as HTMLVideoElement;
@@ -1663,7 +1813,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 video.play().catch(() => {});
               } else {
-                // Pause off-screen videos to save resources
                 if (video.src) video.pause();
               }
             });
@@ -1676,5 +1825,229 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .catch(err => console.error("Error loading gallery:", err));
   }
+
+  // Services Admin CRUD Data Fetcher
+  async function fetchAdminServicesData() {
+    const tableBody = document.getElementById('admin-services-table-body');
+    if (!tableBody) return;
+
+    tableBody.innerHTML = '<tr><td colspan="5" style="padding: 2rem; text-align: center; font-family: var(--font-mono); color: var(--theme-main);"><div class="spinner"></div>Loading services...</td></tr>';
+
+    try {
+      const res = await fetch('/api/services');
+      servicesList = await res.json();
+      
+      tableBody.innerHTML = '';
+      if (servicesList.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="5" style="padding: 2rem; text-align: center; font-family: var(--font-mono); color: var(--text-secondary);">No services configured yet.</td></tr>';
+        return;
+      }
+
+      servicesList.forEach((s: any) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid rgba(0,0,0,0.1)';
+        tr.innerHTML = `
+          <td style="padding: 1rem;"><strong>${escapeHtml(s.name)}</strong></td>
+          <td style="padding: 1rem;">${escapeHtml(s.gender)}</td>
+          <td style="padding: 1rem;">${escapeHtml(s.duration)} mins</td>
+          <td style="padding: 1rem;">$${escapeHtml(s.price)}</td>
+          <td style="padding: 1rem;">
+            <button class="admin-edit-service-btn hover-target" data-id="${escapeHtml(s._id)}" style="background: var(--theme-main); color: white; border: none; padding: 6px 12px; border-radius: 20px; cursor: pointer; margin-right: 5px; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Edit</button>
+            <button class="admin-delete-service-btn hover-target" data-id="${escapeHtml(s._id)}" style="background: transparent; color: red; border: 1px solid red; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
+      
+      const cursor = document.querySelector('.custom-cursor');
+      if (cursor) {
+        tableBody.querySelectorAll('.hover-target').forEach(target => {
+          target.addEventListener('mouseenter', () => cursor.classList.add('hover'));
+          target.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
+        });
+      }
+    } catch {
+      tableBody.innerHTML = '<tr><td colspan="5" style="padding: 2rem; text-align: center; color: red;">Error loading services.</td></tr>';
+    }
+  }
+
+  // Listen for Services Action Clicks
+  document.body.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+
+    if (target.matches('.admin-delete-service-btn')) {
+      const id = target.dataset.id!;
+      if (!confirm('Delete this service?')) return;
+      target.textContent = '…';
+      target.style.opacity = '0.5';
+      const res = await authFetch(`/api/admin/services/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchServices();
+        fetchAdminServicesData();
+      } else {
+        alert('Delete failed');
+        target.textContent = 'Delete';
+        target.style.opacity = '1';
+      }
+      return;
+    }
+
+    if (target.matches('.admin-edit-service-btn')) {
+      const id = target.dataset.id!;
+      const s = servicesList.find(item => item._id === id);
+      if (!s) return;
+
+      const formWrap = document.getElementById('admin-service-form-wrap')!;
+      const formTitle = document.getElementById('admin-service-form-title')!;
+      const asId = document.getElementById('as-id') as HTMLInputElement;
+      const asName = document.getElementById('as-name') as HTMLInputElement;
+      const asGender = document.getElementById('as-gender') as HTMLSelectElement;
+      const asDuration = document.getElementById('as-duration') as HTMLInputElement;
+      const asPrice = document.getElementById('as-price') as HTMLInputElement;
+
+      asId.value = s._id;
+      asName.value = s.name;
+      asGender.value = s.gender;
+      asDuration.value = s.duration.toString();
+      asPrice.value = s.price.toString();
+
+      formTitle.textContent = 'Edit Service';
+      formWrap.style.display = 'block';
+      formWrap.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+  });
+
+  // Service Form Handler Init
+  const handleServiceFormInit = () => {
+    const addBtn = document.getElementById('admin-add-service-btn');
+    const cancelBtn = document.getElementById('admin-service-form-cancel-btn');
+    const formWrap = document.getElementById('admin-service-form-wrap');
+    const form = document.getElementById('admin-service-form') as HTMLFormElement;
+    const formTitle = document.getElementById('admin-service-form-title');
+    const asId = document.getElementById('as-id') as HTMLInputElement;
+
+    if (addBtn && formWrap && cancelBtn && form) {
+      addBtn.addEventListener('click', () => {
+        form.reset();
+        asId.value = '';
+        if (formTitle) formTitle.textContent = 'Add New Service';
+        formWrap.style.display = 'block';
+      });
+
+      cancelBtn.addEventListener('click', () => {
+        formWrap.style.display = 'none';
+      });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = asId.value;
+        const name = (document.getElementById('as-name') as HTMLInputElement).value;
+        const gender = (document.getElementById('as-gender') as HTMLSelectElement).value;
+        const duration = (document.getElementById('as-duration') as HTMLInputElement).value;
+        const price = (document.getElementById('as-price') as HTMLInputElement).value;
+
+        const url = id ? `/api/admin/services/${id}` : '/api/admin/services';
+        const method = id ? 'PUT' : 'POST';
+
+        try {
+          const res = await authFetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, gender, duration, price })
+          });
+
+          if (res.ok) {
+            alert(id ? 'Service updated successfully!' : 'Service created successfully!');
+            formWrap.style.display = 'none';
+            form.reset();
+            await fetchServices();
+            fetchAdminServicesData();
+          } else {
+            alert('Failed to save service.');
+          }
+        } catch {
+          alert('Network error while saving service.');
+        }
+      });
+    }
+  };
+
+  // Search/Filter catalog listeners
+  const searchInputCatalog = document.getElementById('catalog-search') as HTMLInputElement;
+  searchInputCatalog?.addEventListener('input', renderServicesCatalog);
+
+  const filterTabs = document.querySelectorAll('.filter-tab');
+  filterTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      filterTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderServicesCatalog();
+    });
+  });
+
+  // Service Worker Registration for PWA
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        console.log('✅ ServiceWorker registered with scope: ', reg.scope);
+      }).catch(err => {
+        console.error('❌ ServiceWorker registration failed: ', err);
+      });
+    });
+  }
+
+  // PWA Install Prompt Banner
+  let deferredPrompt: any = null;
+  const pwaBanner = document.createElement('div');
+  pwaBanner.className = 'pwa-install-banner';
+  pwaBanner.innerHTML = `
+    <img src="/logo.png" alt="Bobby Salon Logo" class="pwa-logo" />
+    <div class="pwa-info">
+      <h4>Bobby Salon App</h4>
+      <p>Install on your home screen for quick offline bookings.</p>
+    </div>
+    <div class="pwa-buttons">
+      <button class="pwa-btn dismiss hover-target">LATER</button>
+      <button class="pwa-btn install hover-target">INSTALL</button>
+    </div>
+  `;
+  document.body.appendChild(pwaBanner);
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    setTimeout(() => {
+      pwaBanner.style.display = 'flex';
+      const cursor = document.querySelector('.custom-cursor');
+      if (cursor) {
+        pwaBanner.querySelectorAll('.hover-target').forEach(target => {
+          target.addEventListener('mouseenter', () => cursor.classList.add('hover'));
+          target.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
+        });
+      }
+    }, 3000);
+  });
+
+  pwaBanner.querySelector('.pwa-btn.install')?.addEventListener('click', () => {
+    pwaBanner.style.display = 'none';
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === 'accepted') {
+          console.log('User accepted PWA install prompt');
+        }
+        deferredPrompt = null;
+      });
+    }
+  });
+
+  pwaBanner.querySelector('.pwa-btn.dismiss')?.addEventListener('click', () => {
+    pwaBanner.style.display = 'none';
+  });
+
+  // Initializations
+  fetchServices();
+  handleServiceFormInit();
 
 });
