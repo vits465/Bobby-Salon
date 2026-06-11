@@ -785,11 +785,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Gallery delete
         if (target.matches('.gallery-delete-btn')) {
+          const publicId = target.dataset.publicid!;
           const filename = target.dataset.file!;
           if (!confirm(`Delete "${filename}" from portfolio?`)) return;
           target.textContent = '…';
           target.style.opacity = '0.5';
-          const res = await fetch(`/api/admin/gallery/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+          const res = await fetch(`/api/admin/gallery/${encodeURIComponent(publicId)}`, { method: 'DELETE' });
           if (res.ok) { fetchGalleryData(); }
           else { alert('Delete failed'); target.textContent = 'Delete'; target.style.opacity = '1'; }
           return;
@@ -797,11 +798,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Gallery rename
         if (target.matches('.gallery-rename-btn')) {
+          const publicId = target.dataset.publicid!;
           const filename = target.dataset.file!;
           const ext = filename.split('.').pop();
           const newName = prompt(`Rename "${filename}" to:`, filename.replace(`.${ext}`, ''));
           if (!newName) return;
-          const res = await fetch(`/api/admin/gallery/${encodeURIComponent(filename)}`, {
+          const res = await fetch(`/api/admin/gallery/${encodeURIComponent(publicId)}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ newName: `${newName}.${ext}` })
@@ -845,7 +847,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const res = await fetch('/api/gallery');
-      const files: string[] = await res.json();
+      const files: any[] = await res.json();
 
       if (countEl) countEl.textContent = `${files.length} item${files.length !== 1 ? 's' : ''}`;
 
@@ -865,15 +867,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       };
 
+      // Helper to safely encode values for HTML data attributes
+      const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
       const renderGrid = () => {
-        grid.innerHTML = currentOrder.map((file, index) => {
-          const ext = file.split('.').pop()?.toLowerCase() || '';
-          const isVideo = ['mp4', 'webm'].includes(ext);
-          const src = `/gallery/collection/${encodeURIComponent(file)}`;
+        grid.innerHTML = currentOrder.map((item: any, index: number) => {
+          const file = item.filename || 'Untitled';
+          const src = item.url || '';
+          const publicId = item.public_id || '';
+          const safePublicId = escAttr(publicId);
+          const safeFile = escAttr(file);
+          const safeSrc = escAttr(src);
+          const isVideo = item.resource_type === 'video' || ['mp4', 'webm'].includes((file.split('.').pop() || '').toLowerCase());
 
           const preview = isVideo
-            ? `<video src="${src}" style="width:100%;height:160px;object-fit:cover;display:block;border-radius:12px 12px 0 0;" muted preload="metadata"></video>`
-            : `<img src="${src}" alt="${file}" style="width:100%;height:160px;object-fit:cover;display:block;border-radius:12px 12px 0 0;" loading="lazy" onerror="this.style.background='#eee';this.alt='Failed to load';" />`;
+            ? `<video src="${safeSrc}" style="width:100%;height:160px;object-fit:cover;display:block;border-radius:12px 12px 0 0;" muted preload="metadata"></video>`
+            : `<img src="${safeSrc}" alt="${safeFile}" style="width:100%;height:160px;object-fit:cover;display:block;border-radius:12px 12px 0 0;" loading="lazy" onerror="this.style.background='#eee';this.alt='Failed to load';" />`;
 
           const badge = isVideo
             ? `<span style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.6);color:#fff;font-family:var(--font-mono);font-size:0.6rem;padding:3px 8px;border-radius:20px;letter-spacing:0.1em;">▶ VIDEO</span>`
@@ -883,22 +892,22 @@ document.addEventListener('DOMContentLoaded', () => {
           const posBadge = `<span style="position:absolute;top:8px;right:8px;background:var(--theme-main);color:#fff;font-family:var(--font-mono);font-size:0.65rem;padding:3px 8px;border-radius:20px;letter-spacing:0.05em;font-weight:600;">#${index + 1}</span>`;
 
           return `
-            <div class="gallery-card" draggable="true" data-file="${file}" data-index="${index}"
+            <div class="gallery-card" draggable="true" data-file="${safePublicId}" data-index="${index}"
               style="border-radius:12px;overflow:hidden;background:white;box-shadow:0 2px 12px rgba(0,0,0,0.08);transition:transform 0.2s,box-shadow 0.2s,opacity 0.2s;position:relative;cursor:grab;">
               ${preview}
               ${badge}
               ${posBadge}
               <div style="padding:0.75rem;">
-                <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.5rem;" title="${file}">${file}</p>
+                <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.5rem;" title="${safeFile}">${safeFile}</p>
                 <div style="display:flex;gap:0.4rem;margin-bottom:0.5rem;">
-                  <button class="gallery-move-btn" data-file="${file}" data-dir="left" title="Move left"
+                  <button class="gallery-move-btn" data-file="${safePublicId}" data-dir="left" title="Move left"
                     style="flex:0 0 auto;width:32px;font-size:0.85rem;padding:0.3rem;border:1px solid rgba(0,0,0,0.15);background:transparent;border-radius:6px;cursor:none;transition:all 0.2s;"
                     ${index === 0 ? 'disabled style="opacity:0.3;pointer-events:none;flex:0 0 auto;width:32px;font-size:0.85rem;padding:0.3rem;border:1px solid rgba(0,0,0,0.15);background:transparent;border-radius:6px;cursor:none;"' : ''}>◀</button>
-                  <button class="gallery-move-btn" data-file="${file}" data-dir="right" title="Move right"
+                  <button class="gallery-move-btn" data-file="${safePublicId}" data-dir="right" title="Move right"
                     style="flex:0 0 auto;width:32px;font-size:0.85rem;padding:0.3rem;border:1px solid rgba(0,0,0,0.15);background:transparent;border-radius:6px;cursor:none;transition:all 0.2s;"
                     ${index === currentOrder.length - 1 ? 'disabled style="opacity:0.3;pointer-events:none;flex:0 0 auto;width:32px;font-size:0.85rem;padding:0.3rem;border:1px solid rgba(0,0,0,0.15);background:transparent;border-radius:6px;cursor:none;"' : ''}>▶</button>
-                  <button class="gallery-rename-btn" data-file="${file}" style="flex:1;font-family:var(--font-mono);font-size:0.65rem;letter-spacing:0.1em;padding:0.3rem;border:1px solid var(--theme-main);background:transparent;color:var(--theme-main);border-radius:6px;cursor:none;transition:all 0.2s;">RENAME</button>
-                  <button class="gallery-delete-btn" data-file="${file}" style="flex:1;font-family:var(--font-mono);font-size:0.65rem;letter-spacing:0.1em;padding:0.3rem;border:1px solid #dc3545;background:transparent;color:#dc3545;border-radius:6px;cursor:none;transition:all 0.2s;">DELETE</button>
+                  <button class="gallery-rename-btn" data-file="${safeFile}" data-publicid="${safePublicId}" style="flex:1;font-family:var(--font-mono);font-size:0.65rem;letter-spacing:0.1em;padding:0.3rem;border:1px solid var(--theme-main);background:transparent;color:var(--theme-main);border-radius:6px;cursor:none;transition:all 0.2s;">RENAME</button>
+                  <button class="gallery-delete-btn" data-file="${safeFile}" data-publicid="${safePublicId}" style="flex:1;font-family:var(--font-mono);font-size:0.65rem;letter-spacing:0.1em;padding:0.3rem;border:1px solid #dc3545;background:transparent;color:#dc3545;border-radius:6px;cursor:none;transition:all 0.2s;">DELETE</button>
                 </div>
               </div>
             </div>
@@ -916,6 +925,8 @@ document.addEventListener('DOMContentLoaded', () => {
             draggedFile = el.dataset.file || null;
             el.style.opacity = '0.4';
             de.dataTransfer!.effectAllowed = 'move';
+            // Store index for reorder
+            de.dataTransfer!.setData('text/plain', el.dataset.index || '');
           });
 
           el.addEventListener('dragend', () => {
@@ -956,11 +967,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
           el.addEventListener('drop', (e: Event) => {
             e.preventDefault();
-            const targetFile = el.dataset.file;
-            if (!draggedFile || !targetFile || draggedFile === targetFile) return;
+            const targetPublicId = el.dataset.file;
+            if (!draggedFile || !targetPublicId || draggedFile === targetPublicId) return;
 
-            const fromIdx = currentOrder.indexOf(draggedFile);
-            const toIdx = currentOrder.indexOf(targetFile);
+            const fromIdx = currentOrder.findIndex((item: any) => item.public_id === draggedFile);
+            const toIdx = currentOrder.findIndex((item: any) => item.public_id === targetPublicId);
             if (fromIdx === -1 || toIdx === -1) return;
 
             // Determine if drop is before or after target
@@ -969,11 +980,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const mouseX = (e as DragEvent).clientX;
 
             // Remove from old position
-            currentOrder.splice(fromIdx, 1);
+            const [draggedItem] = currentOrder.splice(fromIdx, 1);
             // Insert at new position
-            let insertIdx = currentOrder.indexOf(targetFile);
+            let insertIdx = currentOrder.findIndex((item: any) => item.public_id === targetPublicId);
             if (mouseX >= midX) insertIdx += 1;
-            currentOrder.splice(insertIdx, 0, draggedFile);
+            currentOrder.splice(insertIdx, 0, draggedItem);
 
             el.style.borderLeft = '';
             el.style.borderRight = '';
@@ -986,9 +997,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // ── Move button handlers ─────────
         grid.querySelectorAll('.gallery-move-btn').forEach(btn => {
           btn.addEventListener('click', () => {
-            const file = (btn as HTMLElement).dataset.file!;
+            const publicId = (btn as HTMLElement).dataset.file!;
             const dir = (btn as HTMLElement).dataset.dir!;
-            const idx = currentOrder.indexOf(file);
+            const idx = currentOrder.findIndex((item: any) => item.public_id === publicId);
             if (idx === -1) return;
 
             if (dir === 'left' && idx > 0) {
@@ -1004,7 +1015,8 @@ document.addEventListener('DOMContentLoaded', () => {
       };
 
       renderGrid();
-    } catch {
+    } catch (err) {
+      console.error('Gallery render error:', err);
       if (grid) grid.innerHTML = '<p style="color:red;font-family:var(--font-mono);grid-column:1/-1;">Error loading gallery</p>';
     }
   }
@@ -1027,13 +1039,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sliderTrack) {
     fetch('/api/gallery')
       .then(res => res.json())
-      .then((files: string[]) => {
-        if (files && files.length > 0) {
+      .then((items: any[]) => {
+        if (items && items.length > 0) {
           const generateItemsHTML = () => {
-            return files.map(file => {
-              const ext = file.split('.').pop()?.toLowerCase();
-              const src = `/gallery/collection/${file}`;
-              const isVideo = ext === 'mp4' || ext === 'webm';
+            return items.map((item: any) => {
+              const src = item.url;
+              const isVideo = item.resource_type === 'video' || ['mp4', 'webm'].includes((item.filename || '').split('.').pop()?.toLowerCase() || '');
               // Videos use data-src for lazy loading — loaded by IntersectionObserver
               const content = isVideo 
                 ? `<video data-src="${src}" loop muted playsinline preload="none" poster="" style="background:#e8e8e0;"></video>`

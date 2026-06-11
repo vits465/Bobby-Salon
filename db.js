@@ -1,0 +1,68 @@
+import { MongoClient } from 'mongodb';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_DB = process.env.MONGODB_DB || 'Bobby-salon';
+
+if (!MONGODB_URI) {
+  throw new Error('MONGODB_URI is not defined in .env');
+}
+
+let client = null;
+let db = null;
+
+/**
+ * Connect to MongoDB Atlas.
+ * Reuses existing connection if already connected.
+ */
+export async function connectDB() {
+  if (db) return db;
+
+  client = new MongoClient(MONGODB_URI);
+  await client.connect();
+  db = client.db(MONGODB_DB);
+  console.log(`✅ Connected to MongoDB: ${MONGODB_DB}`);
+  return db;
+}
+
+/**
+ * Close the MongoDB connection gracefully.
+ */
+export async function closeDB() {
+  if (client) {
+    await client.close();
+    client = null;
+    db = null;
+    console.log('MongoDB connection closed.');
+  }
+}
+
+/**
+ * Get a reference to the database (must call connectDB first).
+ */
+export function getDB() {
+  if (!db) throw new Error('Database not connected. Call connectDB() first.');
+  return db;
+}
+
+// Collection accessors
+export function getBookingsCollection() {
+  return getDB().collection('bookings');
+}
+
+export function getCompletedCollection() {
+  return getDB().collection('completedBookings');
+}
+
+export function getQueueCollection() {
+  return getDB().collection('queue');
+}
+
+export function getGalleryOrderCollection() {
+  return getDB().collection('galleryOrder');
+}
+
+export function getSettingsCollection() {
+  return getDB().collection('settings');
+}
