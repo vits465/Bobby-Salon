@@ -1026,10 +1026,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Hero Video Fallback Logic
   const localVideo = document.getElementById('hero-local-video') as HTMLVideoElement;
   const youtubeFallback = document.getElementById('hero-youtube') as HTMLIFrameElement;
-  if (localVideo) {
+  if (localVideo && youtubeFallback) {
     function fallbackToYoutube() {
       if (localVideo) localVideo.style.display = 'none';
-      if (youtubeFallback) youtubeFallback.style.display = 'block';
+      const fallbackSrc = youtubeFallback.dataset.src;
+      if (fallbackSrc) {
+        youtubeFallback.src = fallbackSrc;
+      }
+      youtubeFallback.style.display = 'block';
     }
     localVideo.addEventListener('error', fallbackToYoutube);
   }

@@ -6,6 +6,8 @@
     <title>Bobby Salon | The Craft of Grooming</title>
     <meta name="description" content="A Modern Barbering Experience. Precision · Craft · Style." />
     <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="preload" as="image" href="/logo.png" />
+    <link rel="preload" as="image" href="/images/rooms/room1-back.jpg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&family=Source+Code+Pro&display=swap" rel="stylesheet">
@@ -64,10 +66,10 @@
       <!-- Hero Section: Asymmetrical Grid -->
       <section id="hero" class="section-hero creative-hero">
         <div class="video-background">
-          <video id="hero-local-video" muted playsinline autoplay>
+          <video id="hero-local-video" muted playsinline autoplay loop poster="/images/rooms/room1-back.jpg">
             <source src="/videos/Convert_the_uploaded_salon_vid.mp4" type="video/mp4">
           </video>
-          <iframe id="hero-youtube" style="display: none;" loading="lazy" src="https://www.youtube.com/embed/KiP1k6Vsis0?autoplay=1&mute=1&controls=0&loop=1&playlist=KiP1k6Vsis0&playsinline=1&modestbranding=1&disablekb=1&rel=0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+          <iframe id="hero-youtube" style="display: none;" loading="lazy" data-src="https://www.youtube.com/embed/KiP1k6Vsis0?autoplay=1&mute=1&controls=0&loop=1&playlist=KiP1k6Vsis0&playsinline=1&modestbranding=1&disablekb=1&rel=0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
         </div>
         <div class="hero-text-wrapper">
           <div style="display: flex; align-items: center; gap: 2vw; margin-bottom: 1rem; justify-content: flex-start;" class="parallax-text">
@@ -83,7 +85,7 @@
         
         <div class="hero-image-grid parallax-images">
           <div class="img-wrapper img-1 hover-expand">
-            <img src="/images/rooms/room1-back.jpg" alt="The Classic Cut" />
+            <img src="/images/rooms/room1-back.jpg" alt="The Classic Cut" fetchpriority="high" />
           </div>
           <div class="img-wrapper img-2 hover-expand">
             <img src="/images/rooms/room2-back.jpg" alt="The Beard Room" />
@@ -125,7 +127,9 @@
       <!-- The Craft Section -->
       <section id="craft" class="section-craft parallax-video-container">
         <div class="video-background parallax-video">
-          <iframe loading="lazy" src="https://www.youtube.com/embed/_GSc3uAm8rQ?autoplay=1&mute=1&controls=0&loop=1&playlist=_GSc3uAm8rQ&playsinline=1&modestbranding=1&disablekb=1&rel=0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+          <video class="parallax-video" muted playsinline autoplay loop poster="/images/gallery/item5.jpg" style="opacity: 0.5;">
+            <source src="/videos/add_this_seens_also_and_make_.mp4" type="video/mp4">
+          </video>
         </div>
         <div class="glass-panel glassmorphism">
           <div class="section-label">THE CRAFT</div>
