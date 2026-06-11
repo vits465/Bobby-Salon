@@ -177,9 +177,17 @@ app.get('/api/slots', async (req, res) => {
 
     const bookedForDate = await bookings.find({ date }).toArray();
 
-    const todayDateStr = new Date().toISOString().split('T')[0];
-    const isToday = date === todayDateStr;
+    // Get current time in India (UTC+5.5) for timezone-independent slot calculations
     const now = new Date();
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const indiaNow = new Date(utc + (3600000 * 5.5));
+
+    const year = indiaNow.getFullYear();
+    const month = String(indiaNow.getMonth() + 1).padStart(2, '0');
+    const day = String(indiaNow.getDate()).padStart(2, '0');
+    const todayDateStr = `${year}-${month}-${day}`;
+
+    const isToday = date === todayDateStr;
 
     const slotsStatus = [];
     const currentSlots = getAvailableSlots(date, timings);
@@ -193,10 +201,10 @@ app.get('/api/slots', async (req, res) => {
         if (period === 'PM' && hour !== 12) hour += 12;
         if (period === 'AM' && hour === 12) hour = 0;
 
-        const slotTime = new Date();
+        const slotTime = new Date(indiaNow);
         slotTime.setHours(hour, parseInt(minStr, 10), 0, 0);
 
-        if (now > slotTime) {
+        if (indiaNow > slotTime) {
           showSlot = false;
         }
       }
