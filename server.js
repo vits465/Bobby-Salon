@@ -116,7 +116,7 @@ const getDuration = (serviceName) => {
 
 const ipRequests = new Map();
 
-const rateLimit = (req, res, next) => {
+const bookingRateLimit = (req, res, next) => {
   const ip = req.ip || req.connection?.remoteAddress || 'unknown';
   const now = Date.now();
   if (!ipRequests.has(ip)) ipRequests.set(ip, []);
@@ -201,7 +201,7 @@ app.get('/api/slots', async (req, res) => {
 });
 
 // POST /api/book
-app.post('/api/book', rateLimit, async (req, res) => {
+app.post('/api/book', bookingRateLimit, async (req, res) => {
   const { date, time, name, phone, gender, service, barber, isQueue } = req.body;
   if (!date || !time || !name || !phone || !gender) {
     return res.status(400).json({ error: 'Missing required fields' });
