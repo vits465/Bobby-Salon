@@ -8,7 +8,6 @@ dotenv.config();
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import mongoSanitize from 'express-mongo-sanitize';
 
 import { connectDB, getBookingsCollection, getCompletedCollection, getQueueCollection, getGalleryOrderCollection, getSettingsCollection } from './db.js';
 import { cloudinary, upload } from './cloudinaryConfig.js';
@@ -31,7 +30,23 @@ app.use(helmet({
 }));
 
 // Sanitize user-supplied data to prevent MongoDB Operator Injection
-app.use(mongoSanitize());
+function cleanInput(obj) {
+  if (obj && typeof obj === 'object') {
+    for (const key in obj) {
+      if (key.startsWith('$')) {
+        delete obj[key];
+      } else {
+        cleanInput(obj[key]);
+      }
+    }
+  }
+}
+app.use((req, res, next) => {
+  cleanInput(req.body);
+  cleanInput(req.query);
+  cleanInput(req.params);
+  next();
+});
 
 // Global API Rate Limiting (100 requests per 15 minutes per IP)
 const apiLimiter = rateLimit({
@@ -42,6 +57,19 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', apiLimiter);
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    environment: {
+      has_mongodb_uri: !!process.env.MONGODB_URI,
+      mongodb_db: process.env.MONGODB_DB || 'not_set',
+      has_cloudinary_cloud_name: !!process.env.CLOUDINARY_CLOUD_NAME,
+      has_cloudinary_api_key: !!process.env.CLOUDINARY_API_KEY,
+      has_cloudinary_api_secret: !!process.env.CLOUDINARY_API_SECRET
+    }
+  });
+});
 
 // Ensure database is connected before handling any API request
 app.use('/api', async (req, res, next) => {
