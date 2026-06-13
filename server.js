@@ -152,41 +152,64 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
 
-const getAvailableSlots = (dateStr, timings) => {
-  const defaultTimings = {
-    weekday: { start: 9, end: 20 },
-    saturday: { start: 14, end: 20 },
-    sunday: { start: 9, end: 21 },
-  };
-  const t = timings || defaultTimings;
+/**
+ * Fixed salon slot schedule.
+ * type: 'haircut_beard' = Haircut+Beard slot (40 min)
+ *       'beard_only'    = Beard-only slot (30 min)
+ *       'break'         = Non-bookable break period
+ *
+ * time: 24-hour minutes-from-midnight for easy comparison
+ * displayTime: the AM/PM string shown to customers
+ */
+const FIXED_SLOT_SCHEDULE = [
+  { displayTime: '09:00 AM', endDisplayTime: '09:40 AM', type: 'haircut_beard' },
+  { displayTime: '09:30 AM', endDisplayTime: '10:00 AM', type: 'beard_only' },
+  { displayTime: '10:00 AM', endDisplayTime: '10:40 AM', type: 'haircut_beard' },
+  { displayTime: '10:30 AM', endDisplayTime: '11:00 AM', type: 'beard_only' },
+  { displayTime: '11:00 AM', endDisplayTime: '11:40 AM', type: 'haircut_beard' },
+  { displayTime: '11:30 AM', endDisplayTime: '12:00 PM', type: 'beard_only' },
+  { displayTime: '12:00 PM', endDisplayTime: '12:40 PM', type: 'haircut_beard' },
+  { displayTime: '12:30 PM', endDisplayTime: '01:00 PM', type: 'beard_only' },
+  // LUNCH BREAK: 1:00 PM – 2:00 PM
+  { displayTime: '01:00 PM', endDisplayTime: '02:00 PM', type: 'break', label: '🍽️ Lunch Break (1:00 PM – 2:00 PM)' },
+  { displayTime: '02:00 PM', endDisplayTime: '02:40 PM', type: 'haircut_beard' },
+  { displayTime: '02:30 PM', endDisplayTime: '03:00 PM', type: 'beard_only' },
+  { displayTime: '03:00 PM', endDisplayTime: '03:40 PM', type: 'haircut_beard' },
+  { displayTime: '03:30 PM', endDisplayTime: '04:00 PM', type: 'beard_only' },
+  { displayTime: '04:00 PM', endDisplayTime: '04:40 PM', type: 'haircut_beard' },
+  { displayTime: '04:30 PM', endDisplayTime: '05:00 PM', type: 'beard_only' },
+  { displayTime: '05:00 PM', endDisplayTime: '05:40 PM', type: 'haircut_beard' },
+  { displayTime: '05:30 PM', endDisplayTime: '06:00 PM', type: 'beard_only' },
+  { displayTime: '06:00 PM', endDisplayTime: '06:40 PM', type: 'haircut_beard' },
+  { displayTime: '06:30 PM', endDisplayTime: '07:00 PM', type: 'beard_only' },
+  { displayTime: '07:00 PM', endDisplayTime: '07:40 PM', type: 'haircut_beard' },
+  { displayTime: '07:30 PM', endDisplayTime: '08:00 PM', type: 'beard_only' },
+  // EVENING BREAK: 8:00 PM – 8:20 PM
+  { displayTime: '08:00 PM', endDisplayTime: '08:20 PM', type: 'break', label: '☕ Break (8:00 PM – 8:20 PM)' },
+  { displayTime: '08:20 PM', endDisplayTime: '09:00 PM', type: 'haircut_beard' },
+];
 
-  const dateObj = new Date(dateStr);
-  const day = dateObj.getDay();
+// Parse a displayTime string like '09:00 AM' into minutes from midnight
+function parseDisplayTimeToMinutes(displayTime) {
+  const match = /^(\d{1,2}):(\d{2})\s?(AM|PM)$/i.exec(displayTime || '');
+  if (!match) return null;
+  let hour = parseInt(match[1], 10);
+  const min = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && hour !== 12) hour += 12;
+  if (period === 'AM' && hour === 12) hour = 0;
+  return hour * 60 + min;
+}
 
-  let startHour, endHour;
-  if (day === 0) {
-    startHour = t.sunday.start;
-    endHour = t.sunday.end;
-  } else if (day === 6) {
-    startHour = t.saturday.start;
-    endHour = t.saturday.end;
-  } else {
-    startHour = t.weekday.start;
-    endHour = t.weekday.end;
-  }
-
-  const slots = [];
-  for (let h = startHour; h <= endHour; h++) {
-    const period = h >= 12 ? 'PM' : 'AM';
-    const displayHour = h > 12 ? h - 12 : (h === 0 ? 12 : h);
-    const hourStr = displayHour < 10 ? `0${displayHour}` : displayHour.toString();
-    slots.push(`${hourStr}:00 ${period}`);
-  }
-  return slots;
-};
+// Returns all valid slot displayTimes (non-break) for booking validation
+function getAllValidSlotTimes() {
+  return FIXED_SLOT_SCHEDULE
+    .filter(s => s.type !== 'break')
+    .map(s => s.displayTime);
+}
 
 const getDurationDynamic = (serviceName, servicesMap) => {
-  if (!serviceName) return 60;
+  if (!serviceName) return 40;
   if (servicesMap && servicesMap.has(serviceName)) {
     return servicesMap.get(serviceName).duration;
   }
@@ -199,8 +222,20 @@ const getDurationDynamic = (serviceName, servicesMap) => {
   if (s.includes('30 min')) return 30;
   if (s.includes('25 min')) return 25;
   if (s.includes('15 min')) return 15;
-  return 60;
+  return 40;
 };
+
+// Determine slot type from service name
+function getSlotTypeForService(serviceName) {
+  if (!serviceName) return null;
+  const s = serviceName.toLowerCase();
+  // Beard-only services
+  if ((s.includes('beard') || s.includes('shave')) && !s.includes('haircut') && !s.includes('hair cut')) {
+    return 'beard_only';
+  }
+  // Haircut+Beard or Haircut-only → goes to haircut_beard slots
+  return 'haircut_beard';
+}
 
 function isValidDateString(dateStr) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
@@ -409,63 +444,84 @@ app.get('/api/slots', async (req, res) => {
       return res.json({ date, slots: [], closed: true, message: 'Salon is closed on this date (Holiday/Weekly Off)' });
     }
 
-    const timingsDoc = await settings.findOne({ _id: 'timings' });
-    const timings = timingsDoc || undefined;
-
     const bookedForDate = await bookings.find({ date }).toArray();
     const servicesList = await servicesCol.find({}).toArray();
     const servicesMap = new Map(servicesList.map(s => [s.name, s]));
 
     const indiaNow = getIndiaNow();
     const todayDateStr = getIndiaDateString(indiaNow);
-
+    const nowMinutes = indiaNow.getHours() * 60 + indiaNow.getMinutes();
     const isToday = date === todayDateStr;
 
     const slotsStatus = [];
-    const currentSlots = getAvailableSlots(date, timings);
 
-    for (const time of currentSlots) {
-      let showSlot = true;
-      if (isToday) {
-        const [timeStr, period] = time.split(' ');
-        let [hourStr, minStr] = timeStr.split(':');
-        let hour = parseInt(hourStr, 10);
-        if (period === 'PM' && hour !== 12) hour += 12;
-        if (period === 'AM' && hour === 12) hour = 0;
-
-        const slotTime = new Date(indiaNow);
-        slotTime.setHours(hour, parseInt(minStr, 10), 0, 0);
-
-        if (indiaNow > slotTime) {
-          showSlot = false;
-        }
-      }
-
-      if (showSlot) {
-        const slotBookings = bookedForDate.filter(s => s.time === time);
-        
-        let bobbyTime = 0;
-        let sumitTime = 0;
-        let anyTime = 0;
-        for (const b of slotBookings) {
-          const dur = getDurationDynamic(b.service, servicesMap);
-          if (b.barber === 'Bobby') bobbyTime += dur;
-          else if (b.barber === 'Sumit') sumitTime += dur;
-          else if (b.barber === 'Any Available') anyTime += dur;
-        }
-
-        const totalTime = bobbyTime + sumitTime + anyTime;
-        const isCompletelyFull = totalTime > 105;
-        const hasFemale = slotBookings.some(s => s.gender === 'Female');
-
-        const availableForFemale = !hasFemale && (sumitTime <= 30) && (totalTime <= 90);
-
+    for (const slotDef of FIXED_SLOT_SCHEDULE) {
+      // Always include break slots so the frontend can render them as separators
+      if (slotDef.type === 'break') {
         slotsStatus.push({
-          time,
-          taken: isCompletelyFull,
-          availableForFemale
+          time: slotDef.displayTime,
+          endTime: slotDef.endDisplayTime,
+          type: 'break',
+          label: slotDef.label,
+          isBreak: true,
+          taken: true,
+          bookingCount: 0,
+          maxBookings: 0,
+          bookings: []
         });
+        continue;
       }
+
+      // Skip past slots for today
+      if (isToday) {
+        const slotMinutes = parseDisplayTimeToMinutes(slotDef.displayTime);
+        if (slotMinutes !== null && nowMinutes > slotMinutes) {
+          continue; // past slot, skip
+        }
+      }
+
+      const slotBookings = bookedForDate.filter(b => b.time === slotDef.displayTime);
+
+      // Capacity per slot type:
+      //  beard_only    slots → 30 min window ÷ 15 min per service = 2 per barber → max 4 total
+      //  haircut_beard slots → 40 min window ÷ 40 min per service = 1 per barber → max 2 total
+      const perBarberMax = slotDef.type === 'beard_only' ? 2 : 1;
+      const maxBookings  = perBarberMax * 2; // Bobby + Sumit
+
+      const bobbyBookings = slotBookings.filter(b => b.barber === 'Bobby');
+      const sumitBookings = slotBookings.filter(b => b.barber === 'Sumit');
+      const anyBookings   = slotBookings.filter(b => b.barber === 'Any Available');
+
+      // "Any Available" bookings fill Bobby first, then Sumit
+      const anyCount = anyBookings.length;
+      const effectiveBobbyCount = bobbyBookings.length + Math.min(anyCount, perBarberMax);
+      const effectiveSumitCount = sumitBookings.length + Math.max(anyCount - perBarberMax, 0);
+
+      const bobbyFull = effectiveBobbyCount >= perBarberMax;
+      const sumitFull = effectiveSumitCount >= perBarberMax;
+      const isFull    = bobbyFull && sumitFull;
+
+      const bookingCount = slotBookings.length;
+      const spotsLeft = Math.max(maxBookings - bookingCount, 0);
+
+      slotsStatus.push({
+        time: slotDef.displayTime,
+        endTime: slotDef.endDisplayTime,
+        label: `${slotDef.displayTime.replace(' AM', '').replace(' PM', '')} – ${slotDef.endDisplayTime}`,
+        type: slotDef.type,
+        isBreak: false,
+        taken: isFull,
+        bookingCount,
+        maxBookings,
+        spotsLeft,
+        bobbyAvailable: !bobbyFull,
+        sumitAvailable: !sumitFull,
+        // Detailed per-barber status so UI can show "Bobby: 1/2"
+        barberStatus: {
+          bobby: { count: effectiveBobbyCount, max: perBarberMax, full: bobbyFull },
+          sumit: { count: effectiveSumitCount, max: perBarberMax, full: sumitFull }
+        }
+      });
     }
 
     res.json({ date, slots: slotsStatus });
@@ -512,23 +568,38 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
       return res.status(400).json({ error: 'Cannot book a past time slot.' });
     }
 
+    // Validate that time is a valid slot in the fixed schedule (non-break)
+    const validSlotTimes = getAllValidSlotTimes();
+    if (!validSlotTimes.includes(time)) {
+      return res.status(400).json({ error: 'Invalid time slot.' });
+    }
+
+    // Find the slot definition for service/slot-type validation
+    const slotDef = FIXED_SLOT_SCHEDULE.find(s => s.displayTime === time);
+    if (!slotDef || slotDef.type === 'break') {
+      return res.status(400).json({ error: 'Cannot book a break time slot.' });
+    }
+
     const settings = getSettingsCollection();
     const servicesCol = getServicesCollection();
-    const [blockedDoc, timingsDoc, serviceDoc] = await Promise.all([
+    const [blockedDoc, serviceDoc] = await Promise.all([
       settings.findOne({ _id: 'blocked_dates' }),
-      settings.findOne({ _id: 'timings' }),
       servicesCol.findOne({ name: normalizedService, gender: normalizedGender, active: { $ne: false } })
     ]);
 
     if (blockedDoc && blockedDoc.dates && blockedDoc.dates.includes(date)) {
       return res.status(400).json({ error: 'Salon is closed on this date.' });
     }
-    if (!getAvailableSlots(date, timingsDoc || undefined).includes(time)) {
-      return res.status(400).json({ error: 'Invalid time slot for the selected date.' });
-    }
     if (!serviceDoc) {
       return res.status(400).json({ error: 'Invalid service for the selected gender.' });
     }
+
+    // Validate service type vs slot type
+    const serviceSlotType = getSlotTypeForService(normalizedService);
+    if (slotDef.type === 'beard_only' && serviceSlotType !== 'beard_only') {
+      return res.status(400).json({ error: 'This time slot is only available for beard/shave services.' });
+    }
+    // haircut_beard slots accept both types
 
     const requestedDuration = Number(serviceDoc.duration) || getDurationDynamic(normalizedService);
     if (!Number.isFinite(requestedDuration) || requestedDuration < 5 || requestedDuration > 480) {
@@ -569,41 +640,41 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
         const bookingsForSlot = await bookings.find({ date, time }, { session }).toArray();
 
         if (!queueRequested) {
+          // Capacity per slot type:
+          //  beard_only    → 2 customers per barber (15 min × 2 = 30 min window)
+          //  haircut_beard → 1 customer  per barber (40 min = 40 min window)
+          const perBarberMax = slotDef.type === 'beard_only' ? 2 : 1;
+
+          const bobbyCount = bookingsForSlot.filter(b => b.barber === 'Bobby').length;
+          const sumitCount = bookingsForSlot.filter(b => b.barber === 'Sumit').length;
+          const anyCount   = bookingsForSlot.filter(b => b.barber === 'Any Available').length;
+
+          // "Any" bookings fill Bobby first, then Sumit
+          const effectiveBobby = bobbyCount + Math.min(anyCount, perBarberMax);
+          const effectiveSumit = sumitCount + Math.max(anyCount - perBarberMax, 0);
+
+          const bobbyFull = effectiveBobby >= perBarberMax;
+          const sumitFull = effectiveSumit >= perBarberMax;
+
+          if (normalizedBarber === 'Bobby') {
+            if (bobbyFull) {
+              const slotsLeft = perBarberMax - effectiveBobby;
+              throw httpError(400, `Bobby is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
+            }
+          } else if (normalizedBarber === 'Sumit') {
+            if (sumitFull) {
+              throw httpError(400, `Sumit is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
+            }
+          } else if (normalizedBarber === 'Any Available') {
+            if (bobbyFull && sumitFull) {
+              throw httpError(400, 'This slot is fully booked. Both barbers are at full capacity. Please choose another slot.');
+            }
+          }
+
           if (normalizedGender === 'Female') {
             const hasFemale = bookingsForSlot.some(slot => slot.gender === 'Female');
             if (hasFemale) {
               throw httpError(400, 'Only one female appointment is available per slot.');
-            }
-          }
-
-          let bobbyTime = 0;
-          let sumitTime = 0;
-          let anyTime = 0;
-          for (const slot of bookingsForSlot) {
-            const duration = getDurationDynamic(slot.service);
-            if (slot.barber === 'Bobby') bobbyTime += duration;
-            else if (slot.barber === 'Sumit') sumitTime += duration;
-            else if (slot.barber === 'Any Available') anyTime += duration;
-          }
-
-          const totalBookedTime = bobbyTime + sumitTime + anyTime;
-          if (normalizedBarber === 'Any Available') {
-            if (totalBookedTime + requestedDuration > 120) {
-              throw httpError(400, 'Not enough time available in this slot.');
-            }
-          } else if (normalizedBarber === 'Bobby') {
-            if (bobbyTime + requestedDuration > 60) {
-              throw httpError(400, `Bobby does not have enough time (${requestedDuration} mins needed) in this slot.`);
-            }
-            if (totalBookedTime + requestedDuration > 120) {
-              throw httpError(400, 'Not enough time available in this slot overall.');
-            }
-          } else if (normalizedBarber === 'Sumit') {
-            if (sumitTime + requestedDuration > 60) {
-              throw httpError(400, `Sumit does not have enough time (${requestedDuration} mins needed) in this slot.`);
-            }
-            if (totalBookedTime + requestedDuration > 120) {
-              throw httpError(400, 'Not enough time available in this slot overall.');
             }
           }
 
@@ -615,6 +686,7 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
             gender: normalizedGender,
             service: normalizedService,
             barber: normalizedBarber,
+            slotType: slotDef.type,
             type: 'BOOKING',
             createdAt: new Date().toISOString()
           }, { session });
@@ -627,6 +699,7 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
             gender: normalizedGender,
             service: normalizedService,
             barber: normalizedBarber,
+            slotType: slotDef.type,
             type: 'QUEUE',
             createdAt: new Date().toISOString()
           }, { session });
@@ -751,14 +824,28 @@ app.post('/api/settings/blocked-dates', requireAdmin, async (req, res) => {
 
 // ─── Services API (MongoDB) ──────────────────────────────────────────────────
 
-// GET /api/services
+// GET /api/services  (public — only active + visible)
 app.get('/api/services', async (req, res) => {
+  try {
+    const servicesCol = getServicesCollection();
+    // active !== false  → not soft-deleted
+    // visible !== false → not hidden by admin
+    const services = await servicesCol.find({ active: { $ne: false }, visible: { $ne: false } }).toArray();
+    res.json(services);
+  } catch (err) {
+    console.error('Error fetching services:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/admin/services  (admin — all non-deleted, incl. hidden)
+app.get('/api/admin/services', async (req, res) => {
   try {
     const servicesCol = getServicesCollection();
     const services = await servicesCol.find({ active: { $ne: false } }).toArray();
     res.json(services);
   } catch (err) {
-    console.error('Error fetching services:', err);
+    console.error('Error fetching admin services:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -773,7 +860,8 @@ app.post('/api/admin/services', async (req, res) => {
     const servicesCol = getServicesCollection();
     await servicesCol.insertOne({
       ...servicePayload,
-      active: true
+      active: true,
+      visible: true
     });
     res.json({ success: true });
   } catch (err) {
@@ -803,13 +891,29 @@ app.put('/api/admin/services/:id', async (req, res) => {
   }
 });
 
+// PATCH /api/admin/services/:id/visibility  — toggle show/hide
+app.patch('/api/admin/services/:id/visibility', async (req, res) => {
+  try {
+    const id = validateObjectId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid service id' });
+    const { visible } = req.body;
+    if (typeof visible !== 'boolean') return res.status(400).json({ error: 'visible must be boolean' });
+    const servicesCol = getServicesCollection();
+    await servicesCol.updateOne({ _id: id }, { $set: { visible } });
+    res.json({ success: true, visible });
+  } catch (err) {
+    console.error('Error updating visibility:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // DELETE /api/admin/services/:id
 app.delete('/api/admin/services/:id', async (req, res) => {
   try {
     const id = validateObjectId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid service id' });
     const servicesCol = getServicesCollection();
-    // Soft delete
+    // Soft delete — keeps record but removes from all views
     await servicesCol.updateOne(
       { _id: id },
       { $set: { active: false } }

@@ -8,15 +8,20 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cursor) {
     let cursorX = 0, cursorY = 0;
     let rafId = 0;
+    let hasMoved = false;
 
     const updateCursor = () => {
-      cursor.style.transform = `translate3d(${cursorX - 6}px, ${cursorY - 6}px, 0)`;
+      cursor.style.transform = `translate3d(${cursorX}px, ${cursorY}px, 0)`;
       rafId = 0;
     };
 
     document.addEventListener('mousemove', (e) => {
       cursorX = e.clientX;
       cursorY = e.clientY;
+      if (!hasMoved) {
+        hasMoved = true;
+        cursor.classList.add('visible');
+      }
       if (!rafId) rafId = requestAnimationFrame(updateCursor);
     }, { passive: true });
 
@@ -137,7 +142,6 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="service-card-bottom">
           <span class="service-duration">${escapeHtml(s.duration)} MIN</span>
-          <span class="service-price">$${escapeHtml(s.price)}</span>
         </div>
       `;
 
@@ -196,30 +200,131 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderSlots = () => {
     if (!timeSlotGrid) return;
     timeSlotGrid.innerHTML = '';
+    const selectedService = serviceInput ? serviceInput.value : '';
     const gender = genderInput ? genderInput.value : '';
 
+    // Determine the slot type required by the selected service
+    let requiredSlotType: string | null = null;
+    if (selectedService) {
+      const s = selectedService.toLowerCase();
+      const isBeardOnly = (s.includes('beard') || s.includes('shave')) && !s.includes('haircut') && !s.includes('hair cut');
+      requiredSlotType = isBeardOnly ? 'beard_only' : 'haircut_beard';
+    }
+
+    if (currentSlotsData.length === 0) {
+      timeSlotGrid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); font-family: var(--font-mono); padding: 2rem;">No available slots for this date.</p>`;
+      return;
+    }
+
     currentSlotsData.forEach((slot: any, index: number) => {
+      // ── Break Slot ────────────────────────────────────────────────
+      if (slot.isBreak) {
+        const breakEl = document.createElement('div');
+        breakEl.className = 'slot-break-separator';
+        breakEl.style.cssText = `
+          grid-column: 1 / -1;
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          padding: 0.75rem 1rem;
+          margin: 0.5rem 0;
+          background: linear-gradient(90deg, transparent, rgba(180,120,0,0.12), transparent);
+          border-radius: 8px;
+          border: 1px dashed rgba(180,120,0,0.3);
+        `;
+        breakEl.innerHTML = `
+          <span style="font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.12em; color: rgba(180,120,0,0.85); font-weight: 600;">${slot.label || '⏸ BREAK'}</span>
+          <div style="flex: 1; height: 1px; background: rgba(180,120,0,0.2);"></div>
+          <span style="font-family: var(--font-mono); font-size: 0.7rem; color: rgba(180,120,0,0.6);">CLOSED</span>
+        `;
+        timeSlotGrid.appendChild(breakEl);
+        return;
+      }
+
+      // ── Determine visibility based on selected service ─────────
+      // Beard-only customers only see beard_only slots
+      // Haircut+Beard customers only see haircut_beard slots
+      // No service selected → show all slots
+      let isHidden = false;
+      if (requiredSlotType === 'beard_only' && slot.type !== 'beard_only') {
+        isHidden = true;
+      } else if (requiredSlotType === 'haircut_beard' && slot.type !== 'haircut_beard') {
+        isHidden = true;
+      }
+
+      // Also check female availability (Sumit must be free)
       let isTaken = slot.taken;
-      if (gender === 'Female' && slot.availableForFemale === false) {
+      if (gender === 'Female' && !slot.sumitAvailable) {
         isTaken = true;
       }
 
+      // Build the slot card
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = `slot-btn hover-target ${isTaken ? 'taken' : ''}`;
-      btn.style.animationDelay = `${index * 40}ms`;
-      
+      btn.id = `slot-${slot.time.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+      const isBeardSlot = slot.type === 'beard_only';
+      const slotTypeLabel = isBeardSlot ? 'Beard Only · 15 min' : 'Haircut + Beard · 40 min';
+      const slotTypeColor = isBeardSlot ? 'rgba(70,130,180,0.85)' : 'rgba(51,75,51,0.85)';
+      const slotTypeColorLight = isBeardSlot ? 'rgba(70,130,180,0.12)' : 'rgba(51,75,51,0.10)';
+
+      // Booking count — use server-provided values
+      const bookedCount = slot.bookingCount || 0;
+      const maxCount = slot.maxBookings || (isBeardSlot ? 4 : 2);
+      const spotsLeft = slot.spotsLeft ?? Math.max(maxCount - bookedCount, 0);
+
+      // Status badge: green / amber / red based on how full
+      let statusBg: string, statusColor: string, statusText: string;
       if (isTaken) {
-        btn.innerHTML = `${slot.time}<span style="display:block;font-size:0.65rem;letter-spacing:0.15em;color:rgba(180,0,0,0.5);margin-top:2px;">BOOKED</span>`;
+        statusBg = 'rgba(180,0,0,0.13)'; statusColor = 'rgba(200,40,40,0.95)';
+        statusText = `✖ FULL  ${bookedCount}/${maxCount}`;
+      } else if (spotsLeft === 1) {
+        statusBg = 'rgba(200,120,0,0.13)'; statusColor = 'rgba(190,110,0,0.95)';
+        statusText = `⚠ 1 SPOT LEFT  ${bookedCount}/${maxCount}`;
+      } else if (spotsLeft <= Math.ceil(maxCount / 2)) {
+        statusBg = 'rgba(200,150,0,0.10)'; statusColor = 'rgba(170,120,0,0.90)';
+        statusText = `◑ ${spotsLeft} SPOTS  ${bookedCount}/${maxCount}`;
       } else {
-        btn.textContent = slot.time;
+        statusBg = 'rgba(40,160,70,0.10)'; statusColor = 'rgba(30,140,60,0.95)';
+        statusText = `✔ ${spotsLeft} SPOTS  ${bookedCount}/${maxCount}`;
       }
-      
+      const statusHtml = `<span class="slot-status-badge" style="background:${statusBg};color:${statusColor};">${statusText}</span>`;
+
+      // Barber pills — now use object {count, max, full}
+      const bStatus = slot.barberStatus?.bobby;
+      const sStatus = slot.barberStatus?.sumit;
+
+      const bobbyBg    = bStatus?.full ? 'rgba(180,0,0,0.12)' : 'rgba(40,160,70,0.10)';
+      const bobbyClr   = bStatus?.full ? 'rgba(180,0,0,0.85)' : 'rgba(30,140,60,0.9)';
+      const bobbyLabel = bStatus ? `Bobby ${bStatus.count}/${bStatus.max}` : 'Bobby';
+      const bobbyIcon  = bStatus?.full ? '✗' : '✓';
+
+      const sumitBg    = sStatus?.full ? 'rgba(180,0,0,0.12)' : 'rgba(40,160,70,0.10)';
+      const sumitClr   = sStatus?.full ? 'rgba(180,0,0,0.85)' : 'rgba(30,140,60,0.9)';
+      const sumitLabel = sStatus ? `Sumit ${sStatus.count}/${sStatus.max}` : 'Sumit';
+      const sumitIcon  = sStatus?.full ? '✗' : '✓';
+
+      const bobbyPill = `<span style="font-size:0.58rem;background:${bobbyBg};color:${bobbyClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${bobbyIcon} ${bobbyLabel}</span>`;
+      const sumitPill = `<span style="font-size:0.58rem;background:${sumitBg};color:${sumitClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${sumitIcon} ${sumitLabel}</span>`;
+
+      btn.className = `slot-btn hover-target ${isTaken ? 'taken' : ''} ${isHidden ? 'slot-hidden-type' : ''}`;
+      btn.style.animationDelay = `${index * 30}ms`;
+      btn.disabled = isHidden;
+
+      btn.innerHTML = `
+        <div class="slot-inner">
+          <div class="slot-time-range">${slot.label || slot.time}</div>
+          <div class="slot-type-badge" style="background:${slotTypeColorLight};color:${slotTypeColor};">${slotTypeLabel}</div>
+          <div class="slot-status-row">${statusHtml}</div>
+          <div class="slot-barber-row">${bobbyPill} ${sumitPill}</div>
+        </div>
+      `;
+
       btn.addEventListener('click', () => {
         document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('active', 'queue-active'));
-        
+
         if (isTaken) {
-          const joinQueue = confirm(`The ${slot.time} slot is currently taken. Would you like to join the waitlist queue for this time?`);
+          const joinQueue = confirm(`The ${slot.time} slot is currently fully booked.\nWould you like to join the waitlist queue for this time?`);
           if (joinQueue) {
             btn.classList.add('queue-active');
             timeInput.value = slot.time;
@@ -237,13 +342,20 @@ document.addEventListener('DOMContentLoaded', () => {
           submitBtn.innerHTML = 'BOOK VIA WHATSAPP &rarr;';
         }
       });
-      
+
       timeSlotGrid.appendChild(btn);
     });
   };
 
-
   (window as any).renderSlots = renderSlots;
+
+  // Re-render slots when service selection changes (to filter by slot type)
+  serviceInput?.addEventListener('change', () => {
+    if (typeof (window as any).renderSlots === 'function') {
+      (window as any).renderSlots();
+    }
+  });
+
 
   const fetchSlots = async (date: string) => {
     if (!timeSlotGrid) return;
@@ -861,15 +973,19 @@ document.addEventListener('DOMContentLoaded', () => {
               const res = await fetch(`/api/slots?date=${date}`);
               const data = await res.json();
               mbTime.innerHTML = '<option value="" disabled selected>Select Time</option>';
-              data.slots.forEach((s: any) => {
-                if (!s.taken) {
-                  const opt = document.createElement('option');
-                  opt.value = s.time; opt.textContent = s.time;
-                  mbTime.appendChild(opt);
-                }
+              (data.slots || []).forEach((s: any) => {
+                if (s.isBreak) return; // skip break slots
+                const opt = document.createElement('option');
+                opt.value = s.time;
+                const typeLabel = s.type === 'beard_only' ? '(Beard Only)' : '(Haircut+Beard)';
+                const statusLabel = s.taken ? ' — FULL' : (s.bookingCount === 1 ? ' — 1 spot left' : '');
+                opt.textContent = `${s.label || s.time} ${typeLabel}${statusLabel}`;
+                if (s.isBreak) opt.disabled = true;
+                mbTime.appendChild(opt);
               });
             } catch {
               mbTime.innerHTML = '<option value="" disabled selected>Error loading slots</option>';
+
             }
           });
         }
@@ -1002,7 +1118,7 @@ document.addEventListener('DOMContentLoaded', () => {
                       <th style="padding: 1rem;">Name</th>
                       <th style="padding: 1rem;">Gender</th>
                       <th style="padding: 1rem;">Duration</th>
-                      <th style="padding: 1rem;">Price</th>
+                      <th style="padding: 1rem;">Status</th>
                       <th style="padding: 1rem;">Actions</th>
                     </tr>
                   </thead>
@@ -1834,7 +1950,8 @@ document.addEventListener('DOMContentLoaded', () => {
     tableBody.innerHTML = '<tr><td colspan="5" style="padding: 2rem; text-align: center; font-family: var(--font-mono); color: var(--theme-main);"><div class="spinner"></div>Loading services...</td></tr>';
 
     try {
-      const res = await fetch('/api/services');
+      // Use admin endpoint to get ALL services (incl. hidden ones)
+      const res = await authFetch('/api/admin/services');
       servicesList = await res.json();
       
       tableBody.innerHTML = '';
@@ -1844,16 +1961,41 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       servicesList.forEach((s: any) => {
+        const isVisible = s.visible !== false;
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid rgba(0,0,0,0.1)';
+        tr.style.opacity = isVisible ? '1' : '0.55';
         tr.innerHTML = `
-          <td style="padding: 1rem;"><strong>${escapeHtml(s.name)}</strong></td>
+          <td style="padding: 1rem;">
+            <strong>${escapeHtml(s.name)}</strong>
+          </td>
           <td style="padding: 1rem;">${escapeHtml(s.gender)}</td>
           <td style="padding: 1rem;">${escapeHtml(s.duration)} mins</td>
-          <td style="padding: 1rem;">$${escapeHtml(s.price)}</td>
           <td style="padding: 1rem;">
-            <button class="admin-edit-service-btn hover-target" data-id="${escapeHtml(s._id)}" style="background: var(--theme-main); color: white; border: none; padding: 6px 12px; border-radius: 20px; cursor: pointer; margin-right: 5px; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Edit</button>
-            <button class="admin-delete-service-btn hover-target" data-id="${escapeHtml(s._id)}" style="background: transparent; color: red; border: 1px solid red; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>
+            <span style="
+              display: inline-block;
+              font-family: var(--font-mono);
+              font-size: 0.65rem;
+              letter-spacing: 0.1em;
+              padding: 3px 10px;
+              border-radius: 20px;
+              text-transform: uppercase;
+              font-weight: 700;
+              background: ${isVisible ? 'rgba(40,160,70,0.12)' : 'rgba(180,0,0,0.10)'};
+              color: ${isVisible ? 'rgba(30,140,60,0.95)' : 'rgba(180,0,0,0.85)'};
+              border: 1px solid ${isVisible ? 'rgba(40,160,70,0.25)' : 'rgba(180,0,0,0.2)'};
+            ">${isVisible ? '● Visible' : '○ Hidden'}</span>
+          </td>
+          <td style="padding: 1rem; white-space: nowrap;">
+            <button class="admin-toggle-visibility-btn hover-target"
+              data-id="${escapeHtml(s._id)}"
+              data-visible="${isVisible ? 'true' : 'false'}"
+              title="${isVisible ? 'Hide from website' : 'Show on website'}"
+              style="background: ${isVisible ? 'rgba(180,0,0,0.08)' : 'rgba(40,160,70,0.10)'}; color: ${isVisible ? 'rgba(180,0,0,0.85)' : 'rgba(30,140,60,0.9)'}; border: 1px solid ${isVisible ? 'rgba(180,0,0,0.2)' : 'rgba(40,160,70,0.2)'}; padding: 5px 10px; border-radius: 20px; cursor: pointer; margin-right: 4px; font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; font-weight: 600;">
+              ${isVisible ? '🙈 Hide' : '👁 Show'}
+            </button>
+            <button class="admin-edit-service-btn hover-target" data-id="${escapeHtml(s._id)}" style="background: var(--theme-main); color: white; border: none; padding: 5px 10px; border-radius: 20px; cursor: pointer; margin-right: 4px; font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase;">Edit</button>
+            <button class="admin-delete-service-btn hover-target" data-id="${escapeHtml(s._id)}" style="background: transparent; color: red; border: 1px solid red; padding: 5px 10px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase;">Delete</button>
           </td>
         `;
         tableBody.appendChild(tr);
@@ -1874,6 +2016,34 @@ document.addEventListener('DOMContentLoaded', () => {
   // Listen for Services Action Clicks
   document.body.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
+
+    // Visibility toggle
+    if (target.matches('.admin-toggle-visibility-btn')) {
+      const id = target.dataset.id!;
+      const currentlyVisible = target.dataset.visible === 'true';
+      const newVisible = !currentlyVisible;
+      target.textContent = '…';
+      (target as HTMLButtonElement).disabled = true;
+      try {
+        const res = await authFetch(`/api/admin/services/${id}/visibility`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ visible: newVisible })
+        });
+        if (res.ok) {
+          await fetchServices();
+          fetchAdminServicesData();
+        } else {
+          alert('Failed to update visibility.');
+          (target as HTMLButtonElement).disabled = false;
+          target.textContent = currentlyVisible ? '🙈 Hide' : '👁 Show';
+        }
+      } catch {
+        alert('Network error.');
+        (target as HTMLButtonElement).disabled = false;
+      }
+      return;
+    }
 
     if (target.matches('.admin-delete-service-btn')) {
       const id = target.dataset.id!;
