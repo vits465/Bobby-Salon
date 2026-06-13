@@ -2,6 +2,11 @@
 import './index.css';
 
 document.addEventListener('DOMContentLoaded', () => {
+  if (window.location.pathname === '/admin' || window.location.pathname === '/admin/') {
+    window.location.replace(window.location.origin + '/#admin');
+    return;
+  }
+
   // Custom Cursor Logic — GPU-optimized
   const cursor = document.querySelector('.custom-cursor') as HTMLDivElement;
 
@@ -672,58 +677,178 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let adminRefreshInterval: any = null;
 
+  const showLoginContainer = () => {
+    let loginContainer = document.getElementById('admin-login-container');
+    if (!loginContainer) {
+      loginContainer = document.createElement('div');
+      loginContainer.id = 'admin-login-container';
+      document.body.appendChild(loginContainer);
+    }
+    
+    loginContainer.style.display = 'block';
+    loginContainer.innerHTML = `
+      <div class="login-wrapper" style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem; background: var(--bg-main);">
+        <div class="glassmorphism-dark login-card" style="width: 100%; max-width: 420px; padding: 3rem 2.5rem; border-radius: 16px; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 20px 40px rgba(0,0,0,0.06); text-align: center; background: oklch(98% 0.01 145);">
+          <h2 style="font-family: var(--font-serif); font-size: 2.2rem; color: var(--theme-main); margin-bottom: 0.5rem; letter-spacing: 0.05em; text-transform: uppercase;">Bobby Salon</h2>
+          <p style="font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.1em; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2.5rem;">Admin Access Portal</p>
+          
+          <form id="admin-login-form" style="text-align: left;">
+            <div style="margin-bottom: 1.5rem;">
+              <label for="login-username" style="font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; color: var(--text-secondary); display: block; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 600;">Username</label>
+              <input type="text" id="login-username" required style="width: 100%; padding: 0.85rem 1rem; border-radius: 8px; border: 1px solid rgba(0,0,0,0.1); font-family: var(--font-sans); font-size: 0.95rem; background: rgba(255,255,255,0.6); outline: none; transition: border-color 0.3s;" placeholder="e.g. bobby" />
+            </div>
+            
+            <div style="margin-bottom: 2rem;">
+              <label for="login-password" style="font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; color: var(--text-secondary); display: block; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 600;">Password</label>
+              <input type="password" id="login-password" required style="width: 100%; padding: 0.85rem 1rem; border-radius: 8px; border: 1px solid rgba(0,0,0,0.1); font-family: var(--font-sans); font-size: 0.95rem; background: rgba(255,255,255,0.6); outline: none; transition: border-color 0.3s;" placeholder="••••••••" />
+            </div>
+            
+            <div id="login-error-msg" style="display: none; color: #d32f2f; font-family: var(--font-mono); font-size: 0.75rem; margin-bottom: 1.5rem; text-align: center; padding: 0.5rem; border-radius: 6px; background: rgba(211, 47, 47, 0.05);">
+              Invalid credentials. Please try again.
+            </div>
+            
+            <button type="submit" class="hover-target" style="width: 100%; padding: 1rem; background: var(--theme-main); color: white; border: none; border-radius: 8px; font-family: var(--font-mono); font-size: 0.85rem; font-weight: bold; letter-spacing: 0.15em; text-transform: uppercase; cursor: pointer; transition: background 0.3s; margin-bottom: 1rem;">Log In</button>
+            
+            <button type="button" id="login-cancel-btn" class="hover-target" style="width: 100%; padding: 0.85rem; background: transparent; color: var(--text-secondary); border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: all 0.3s;">Cancel</button>
+          </form>
+        </div>
+      </div>
+    `;
+
+    // Add submit and cancel events
+    const loginForm = document.getElementById('admin-login-form') as HTMLFormElement;
+    const usernameInput = document.getElementById('login-username') as HTMLInputElement;
+    const passwordInput = document.getElementById('login-password') as HTMLInputElement;
+    const errorMsg = document.getElementById('login-error-msg') as HTMLElement;
+    const cancelBtn = document.getElementById('login-cancel-btn') as HTMLButtonElement;
+
+    // input focus styling
+    [usernameInput, passwordInput].forEach(input => {
+      input.addEventListener('focus', () => {
+        input.style.borderColor = 'var(--theme-main)';
+      });
+      input.addEventListener('blur', () => {
+        input.style.borderColor = 'rgba(0,0,0,0.1)';
+      });
+    });
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorMsg.style.display = 'none';
+      const username = usernameInput.value;
+      const password = passwordInput.value;
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          adminPassword = data.token;
+          sessionStorage.setItem('adminPassword', data.token);
+          checkAdmin();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          errorMsg.textContent = data.error || 'Invalid username or password.';
+          errorMsg.style.display = 'block';
+        }
+      } catch (err) {
+        errorMsg.textContent = 'Network error. Please try again.';
+        errorMsg.style.display = 'block';
+      }
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      window.location.hash = '';
+    });
+
+    // Re-attach custom cursor hover
+    const cursor = document.querySelector('.custom-cursor');
+    if (cursor) {
+      loginContainer.querySelectorAll('.hover-target').forEach(target => {
+        target.addEventListener('mouseenter', () => cursor.classList.add('hover'));
+        target.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
+      });
+    }
+  };
+
   const checkAdmin = async () => {
     if (window.location.hash === '#admin') {
       const isLocalBypass = window.location.hostname === 'localhost' && window.location.search.includes('bypass=1');
       let pwd = adminPassword;
-      if (!pwd) {
-        pwd = isLocalBypass ? 'bobby123' : (prompt("Enter Admin Password:") || '');
+      if (!pwd && isLocalBypass) {
+        pwd = 'bobby123';
       }
-      if (!pwd) {
-        window.location.hash = '';
-        return;
-      }
-      try {
-        const testHeaders = new Headers();
-        testHeaders.set('Authorization', `Bearer ${pwd}`);
-        const res = await fetch('/api/admin/bookings', { headers: testHeaders });
-        if (res.ok) {
-          adminPassword = pwd;
-          sessionStorage.setItem('adminPassword', pwd);
-          renderAdminDashboard();
-          // Auto-refresh every 10 seconds
-          if (!adminRefreshInterval) {
-            adminRefreshInterval = setInterval(() => {
-              if (window.location.hash === '#admin') {
-                fetchAdminData();
-              } else {
-                clearInterval(adminRefreshInterval);
-                adminRefreshInterval = null;
+
+      if (pwd) {
+        try {
+          const testHeaders = new Headers();
+          testHeaders.set('Authorization', `Bearer ${pwd}`);
+          const res = await fetch('/api/admin/bookings', { headers: testHeaders });
+          if (res.ok) {
+            adminPassword = pwd;
+            sessionStorage.setItem('adminPassword', pwd);
+            
+            // Hide public page content
+            Array.from(document.body.children).forEach(child => {
+              if (child.id !== 'admin-container' && !child.classList.contains('custom-cursor') && !child.classList.contains('ambient-glow')) {
+                (child as HTMLElement).style.display = 'none';
               }
-            }, 10000);
+            });
+            const loginContainer = document.getElementById('admin-login-container');
+            if (loginContainer) loginContainer.style.display = 'none';
+
+            renderAdminDashboard();
+            // Auto-refresh every 10 seconds
+            if (!adminRefreshInterval) {
+              adminRefreshInterval = setInterval(() => {
+                if (window.location.hash === '#admin') {
+                  fetchAdminData();
+                } else {
+                  clearInterval(adminRefreshInterval);
+                  adminRefreshInterval = null;
+                }
+              }, 10000);
+            }
+            return;
+          } else {
+            sessionStorage.removeItem('adminPassword');
+            adminPassword = '';
           }
-        } else {
-          alert("Incorrect password or unauthorized");
+        } catch {
           sessionStorage.removeItem('adminPassword');
           adminPassword = '';
-          window.location.hash = '';
         }
-      } catch {
-        alert("Network error while logging in");
-        window.location.hash = '';
       }
+
+      // Hide public & admin dashboards
+      Array.from(document.body.children).forEach(child => {
+        if (child.id !== 'admin-login-container' && !child.classList.contains('custom-cursor') && !child.classList.contains('ambient-glow')) {
+          (child as HTMLElement).style.display = 'none';
+        }
+      });
+      const adminContainer = document.getElementById('admin-container');
+      if (adminContainer) adminContainer.style.display = 'none';
+
+      showLoginContainer();
     } else {
       if (adminRefreshInterval) {
         clearInterval(adminRefreshInterval);
         adminRefreshInterval = null;
       }
       Array.from(document.body.children).forEach(child => {
-        if (child.id !== 'admin-container' && !child.classList.contains('custom-cursor') && !child.classList.contains('ambient-glow')) {
+        if (child.id !== 'admin-container' && child.id !== 'admin-login-container' && !child.classList.contains('custom-cursor') && !child.classList.contains('ambient-glow')) {
           (child as HTMLElement).style.display = '';
         }
       });
       const adminContainer = document.getElementById('admin-container');
       if (adminContainer) adminContainer.style.display = 'none';
+
+      const loginContainer = document.getElementById('admin-login-container');
+      if (loginContainer) loginContainer.style.display = 'none';
     }
   };
 
@@ -1030,7 +1155,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function renderAdminDashboard() {
     let container = document.getElementById('admin-container');
-    
     // Hide original page content
     Array.from(document.body.children).forEach(child => {
       if (child.id !== 'admin-container' && !child.classList.contains('custom-cursor') && !child.classList.contains('ambient-glow')) {
@@ -1045,9 +1169,12 @@ document.addEventListener('DOMContentLoaded', () => {
       
       container.innerHTML = `
         <div class="container" style="padding-top: 6rem; padding-bottom: 6rem; min-height: 100vh;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem;">
-            <h1 style="color: var(--theme-main); font-family: var(--font-serif); font-size: clamp(2.5rem, 5vw, 4rem);">Admin Dashboard</h1>
-            <a href="/" class="outline-btn hover-target" style="text-decoration: none;" onclick="window.location.reload()">Back to Site</a>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem; flex-wrap: wrap; gap: 1rem;">
+            <h1 style="color: var(--theme-main); font-family: var(--font-serif); font-size: clamp(2.5rem, 5vw, 4rem); margin: 0;">Admin Dashboard</h1>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+              <button id="admin-logout-btn" class="hover-target" style="background: transparent; border: 1px solid rgba(0,0,0,0.15); border-radius: 20px; padding: 8px 20px; font-family: var(--font-mono); font-size: 0.8rem; cursor: pointer; text-transform: uppercase; color: var(--text-secondary); transition: all 0.3s;">Logout</button>
+              <a href="/" class="outline-btn hover-target" style="text-decoration: none; border-radius: 20px; padding: 8px 20px; font-family: var(--font-mono); font-size: 0.8rem; display: inline-block;" onclick="window.location.reload()">Back to Site</a>
+            </div>
           </div>
 
           <!-- Tabs -->
@@ -1464,6 +1591,27 @@ document.addEventListener('DOMContentLoaded', () => {
               alert('Network error.');
             }
           }
+        });
+      }
+
+      // Bind logout button click
+      const logoutBtn = document.getElementById('admin-logout-btn');
+      if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+          try {
+            await fetch('/api/auth/logout', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${adminPassword}`
+              }
+            });
+          } catch (e) {
+            console.error("Logout request failed:", e);
+          }
+          sessionStorage.removeItem('adminPassword');
+          adminPassword = '';
+          window.location.hash = '';
+          window.location.reload();
         });
       }
 

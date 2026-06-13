@@ -4,13 +4,13 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { timingSafeEqual } from 'crypto';
+import crypto, { timingSafeEqual } from 'crypto';
 dotenv.config();
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
-import { connectDB, getClient, getDB, getBookingsCollection, getCompletedCollection, getQueueCollection, getGalleryOrderCollection, getSettingsCollection, getServicesCollection } from './db.js';
+import { connectDB, getClient, getDB, getBookingsCollection, getCompletedCollection, getQueueCollection, getGalleryOrderCollection, getSettingsCollection, getServicesCollection, getAdminsCollection, getSessionsCollection } from './db.js';
 import { cloudinary, upload } from './cloudinaryConfig.js';
 import { ObjectId } from 'mongodb';
 
@@ -82,22 +82,75 @@ function safeCompare(a, b) {
   return aBuffer.length === bBuffer.length && timingSafeEqual(aBuffer, bBuffer);
 }
 
-function requireAdmin(req, res, next) {
-  const expected = process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN;
-  if (!expected) {
-    return res.status(503).json({ error: 'Admin access is not configured.' });
-  }
+function hashPassword(password, salt) {
+  return crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+}
 
+function generateSalt() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+async function seedAdminsIfNeeded() {
+  try {
+    const adminsCol = getAdminsCollection();
+    const count = await adminsCol.countDocuments();
+    if (count === 0) {
+      const defaultPassword = process.env.ADMIN_PASSWORD || 'bobby123';
+      const usernames = ['admin', 'bobby', 'sumit', 'receptionist'];
+      const adminDocs = usernames.map(username => {
+        const salt = generateSalt();
+        const passwordHash = hashPassword(defaultPassword, salt);
+        return {
+          username: username.toLowerCase(),
+          salt,
+          passwordHash,
+          createdAt: new Date()
+        };
+      });
+      await adminsCol.insertMany(adminDocs);
+      console.log("🌱 Default admins seeded successfully in database!");
+    }
+  } catch (err) {
+    console.error("❌ Failed to seed admins:", err);
+  }
+}
+
+async function requireAdmin(req, res, next) {
   const authHeader = req.get('authorization') || '';
   const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
   const headerToken = req.get('x-admin-password') || '';
   const supplied = bearerToken || headerToken;
 
-  if (!supplied || !safeCompare(supplied, expected)) {
+  if (!supplied) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  next();
+  // 1. Fallback comparison (for legacy or development bypass)
+  const expected = process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN;
+  if (expected) {
+    try {
+      if (safeCompare(supplied, expected)) {
+        req.adminUsername = 'legacy-admin';
+        return next();
+      }
+    } catch (err) {
+      // safeCompare might fail on mismatching lengths, handled gracefully
+    }
+  }
+
+  // 2. Query sessions collection in database
+  try {
+    const sessionsCol = getSessionsCollection();
+    const session = await sessionsCol.findOne({ token: supplied });
+    if (session) {
+      req.adminUsername = session.username;
+      return next();
+    }
+  } catch (err) {
+    console.error('Error verifying admin session:', err);
+  }
+
+  return res.status(401).json({ error: 'Unauthorized' });
 }
 app.use((req, res, next) => {
   cleanInput(req.body);
@@ -115,6 +168,58 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', apiLimiter);
+// ─── Authentication API ──────────────────────────────────────────────────────
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required.' });
+    }
+
+    const adminsCol = getAdminsCollection();
+    const admin = await adminsCol.findOne({ username: username.toLowerCase() });
+    
+    if (!admin) {
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+
+    const calculatedHash = hashPassword(password, admin.salt);
+    if (calculatedHash !== admin.passwordHash) {
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+
+    // Create session
+    const token = crypto.randomBytes(32).toString('hex');
+    const sessionsCol = getSessionsCollection();
+    await sessionsCol.insertOne({
+      token,
+      username: admin.username,
+      createdAt: new Date()
+    });
+
+    res.json({ token, username: admin.username });
+  } catch (err) {
+    console.error('Error logging in admin:', err);
+    res.status(500).json({ error: 'Server error during login.' });
+  }
+});
+
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const authHeader = req.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (token) {
+      const sessionsCol = getSessionsCollection();
+      await sessionsCol.deleteOne({ token });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error during logout:', err);
+    res.status(500).json({ error: 'Server error during logout.' });
+  }
+});
+
 app.use('/api/admin', requireAdmin);
 
 app.get('/api/health', (req, res) => {
@@ -830,7 +935,10 @@ app.get('/api/services', async (req, res) => {
     const servicesCol = getServicesCollection();
     // active !== false  → not soft-deleted
     // visible !== false → not hidden by admin
-    const services = await servicesCol.find({ active: { $ne: false }, visible: { $ne: false } }).toArray();
+    const services = await servicesCol.find(
+      { active: { $ne: false }, visible: { $ne: false } },
+      { projection: { price: 0 } }
+    ).toArray();
     res.json(services);
   } catch (err) {
     console.error('Error fetching services:', err);
@@ -1142,6 +1250,14 @@ app.put('/api/admin/gallery/order', async (req, res) => {
   }
 });
 
+// Redirect legacy /admin path to hash route
+app.get('/admin', (req, res) => {
+  res.redirect('/#admin');
+});
+app.get('/admin/', (req, res) => {
+  res.redirect('/#admin');
+});
+
 // ─── SPA Fallback ────────────────────────────────────────────────────────────
 
 if (fs.existsSync(distPath)) {
@@ -1159,6 +1275,7 @@ async function startServer() {
   try {
     await connectDB();
     await seedServicesIfNeeded();
+    await seedAdminsIfNeeded();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Bobby Salon Server running on http://localhost:${PORT}`);
     });
@@ -1173,7 +1290,10 @@ if (!process.env.VERCEL) {
 } else {
   // In serverless environments, connect to DB but let Vercel handle the request wrapping
   connectDB()
-    .then(() => seedServicesIfNeeded())
+    .then(async () => {
+      await seedServicesIfNeeded();
+      await seedAdminsIfNeeded();
+    })
     .catch(err => console.error('DB Connection Failed:', err));
 }
 

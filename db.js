@@ -81,3 +81,12 @@ export function getSettingsCollection() {
 export function getServicesCollection() {
   return getDB().collection('services');
 }
+
+export function getAdminsCollection() {
+  return getDB().collection('admins');
+}
+
+export function getSessionsCollection() {
+  return getDB().collection('sessions');
+}
+
