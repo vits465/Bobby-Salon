@@ -249,11 +249,27 @@ app.use('/api', async (req, res, next) => {
 // In production: serve Vite-built static files from dist/
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      const base = path.basename(filePath);
+      if (base === 'index.html' || base === 'sw.js' || base === 'manifest.json') {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      } else if (filePath.split(path.sep).includes('assets')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    }
+  }));
 }
 
 // Also serve public/ for images, logos, videos
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    const base = path.basename(filePath);
+    if (base === 'index.html' || base === 'sw.js' || base === 'manifest.json') {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+}));
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
 
@@ -1265,6 +1281,7 @@ if (fs.existsSync(distPath)) {
     if (req.path.startsWith('/api/') || req.path.startsWith('/gallery/')) {
       return next();
     }
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }

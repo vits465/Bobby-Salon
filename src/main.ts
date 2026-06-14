@@ -1226,7 +1226,7 @@ document.addEventListener('DOMContentLoaded', () => {
                       <input type="number" id="as-duration" required min="5" max="300" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);" placeholder="30" />
                     </div>
                     <div style="flex: 1;">
-                      <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">PRICE ($)</label>
+                      <label style="font-size:0.75rem; font-family:var(--font-mono); display:block; margin-bottom:0.3rem;">PRICE (₹)</label>
                       <input type="number" id="as-price" required min="1" step="0.01" style="width:100%; padding:0.5rem; border-radius:6px; border:1px solid rgba(0,0,0,0.15);" placeholder="50" />
                     </div>
                   </div>
@@ -1399,17 +1399,9 @@ document.addEventListener('DOMContentLoaded', () => {
           if (sTab) { sTab.style.background = 'var(--theme-main)'; sTab.style.color = 'white'; }
           fetchSettingsData();
         } else if (tab === 'gallery') {
-          const GALLERY_PASSWORD = 'Adii@465';
-          const isLocalBypass = window.location.hostname === 'localhost' && window.location.search.includes('bypass=1');
-          const pwd = isLocalBypass ? GALLERY_PASSWORD : prompt('🔒 Enter Gallery Password:');
-          if (pwd === GALLERY_PASSWORD) {
-            if (gPanel) gPanel.style.display = '';
-            if (gTab) { gTab.style.background = 'var(--theme-main)'; gTab.style.color = 'white'; }
-            fetchGalleryData();
-          } else {
-            alert('❌ Access denied.');
-            (window as any)._adminTab('bookings');
-          }
+          if (gPanel) gPanel.style.display = '';
+          if (gTab) { gTab.style.background = 'var(--theme-main)'; gTab.style.color = 'white'; }
+          fetchGalleryData();
         }
       };
 
@@ -1752,12 +1744,12 @@ document.addEventListener('DOMContentLoaded', () => {
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
           <div style="background: rgba(255,255,255,0.4); padding: 1.5rem; border-radius: 12px; text-align: center; border: 1px solid rgba(0,0,0,0.05);">
             <h4 style="font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem;">Completed Revenue</h4>
-            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #2E8B57; font-weight: 500; margin: 0;">$${revenueCompleted}</p>
+            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #2E8B57; font-weight: 500; margin: 0;">₹${revenueCompleted}</p>
             <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">${totalCompleted} bookings</span>
           </div>
           <div style="background: rgba(255,255,255,0.4); padding: 1.5rem; border-radius: 12px; text-align: center; border: 1px solid rgba(0,0,0,0.05);">
             <h4 style="font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem;">Projected Revenue</h4>
-            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #FF8C00; font-weight: 500; margin: 0;">$${revenueProjected}</p>
+            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #FF8C00; font-weight: 500; margin: 0;">₹${revenueProjected}</p>
             <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">${totalActive} active bookings</span>
           </div>
           <div style="background: rgba(255,255,255,0.4); padding: 1.5rem; border-radius: 12px; text-align: center; border: 1px solid rgba(0,0,0,0.05);">
@@ -1776,7 +1768,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <div>
                 <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:0.85rem; margin-bottom:0.4rem;">
                   <span>Bobby</span>
-                  <strong>$${bobbyRev} (${bobbyCompleted} jobs)</strong>
+                  <strong>₹${bobbyRev} (${bobbyCompleted} jobs)</strong>
                 </div>
                 <div style="background:rgba(0,0,0,0.05); height:12px; border-radius:10px; overflow:hidden;">
                   <div style="background:var(--theme-main); width:${revenueCompleted > 0 ? (bobbyRev / revenueCompleted) * 100 : 0}%; height:100%; border-radius:10px; transition: width 1s ease-out;"></div>
@@ -1786,7 +1778,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <div>
                 <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:0.85rem; margin-bottom:0.4rem;">
                   <span>Sumit</span>
-                  <strong>$${sumitRev} (${sumitCompleted} jobs)</strong>
+                  <strong>₹${sumitRev} (${sumitCompleted} jobs)</strong>
                 </div>
                 <div style="background:rgba(0,0,0,0.05); height:12px; border-radius:10px; overflow:hidden;">
                   <div style="background:#8FBC8F; width:${revenueCompleted > 0 ? (sumitRev / revenueCompleted) * 100 : 0}%; height:100%; border-radius:10px; transition: width 1s ease-out;"></div>
@@ -2306,12 +2298,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Service Worker Registration for PWA
   if ('serviceWorker' in navigator) {
+    const hasController = !!navigator.serviceWorker.controller;
+    let refreshing = false;
+
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').then(reg => {
         console.log('✅ ServiceWorker registered with scope: ', reg.scope);
+
+        // Check for updates periodically or on page interaction
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('✨ New Service Worker version available.');
+              }
+            });
+          }
+        });
       }).catch(err => {
         console.error('❌ ServiceWorker registration failed: ', err);
       });
+    });
+
+    // Reload the page when a new service worker takes control (only if we already had a controller)
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hasController && !refreshing) {
+        refreshing = true;
+        console.log('🔄 New Service Worker version activated. Reloading page...');
+        window.location.reload();
+      }
     });
   }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bobby-salon-cache-v3';
+const CACHE_NAME = 'bobby-salon-cache-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -7,6 +7,7 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);
@@ -24,6 +25,8 @@ self.addEventListener('activate', (e) => {
           }
         })
       );
+    }).then(() => {
+      return self.clients.claim();
     })
   );
 });
@@ -34,6 +37,35 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   
+  const url = new URL(e.request.url);
+
+  // Network-First for HTML/navigation requests to guarantee we load the latest build files when online
+  if (
+    e.request.mode === 'navigate' ||
+    url.pathname === '/' ||
+    url.pathname === '/index.html' ||
+    url.pathname.endsWith('.html')
+  ) {
+    e.respondWith(
+      fetch(e.request).then((response) => {
+        if (response && response.status === 200) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, responseToCache);
+          });
+        }
+        return response;
+      }).catch(() => {
+        return caches.match(e.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          return caches.match('/');
+        });
+      })
+    );
+    return;
+  }
+  
+  // Cache-First for other assets (JS, CSS, images)
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -41,7 +73,7 @@ self.addEventListener('fetch', (e) => {
       }
       
       return fetch(e.request).then((response) => {
-        if (!response || response.status !== 200 || response.type !== 'basic') {
+        if (!response || response.status !== 200) {
           return response;
         }
         
@@ -52,8 +84,9 @@ self.addEventListener('fetch', (e) => {
         
         return response;
       }).catch(() => {
-        // Fallback for offline if fetching fails
-        return caches.match('/');
+        if (e.request.destination === 'image') {
+          return caches.match('/logo.png');
+        }
       });
     })
   );
