@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"node server.js\" \"vite\"",
+    "dev": "concurrently \"node server/server.js\" \"vite\"",
     "build": "tsc -b && vite build",
-    "start": "node server.js",
-    "deploy": "npm run build && node server.js",
+    "start": "node server/server.js",
+    "deploy": "npm run build && node server/server.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

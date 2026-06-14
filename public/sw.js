@@ -39,6 +39,11 @@ self.addEventListener('fetch', (e) => {
   
   const url = new URL(e.request.url);
 
+  // Skip caching for large media files (videos) to avoid range request failures (especially on Safari/iOS)
+  if (url.pathname.endsWith('.mp4') || url.pathname.endsWith('.webm') || url.pathname.endsWith('.ogg')) {
+    return;
+  }
+
   // Network-First for HTML/navigation requests to guarantee we load the latest build files when online
   if (
     e.request.mode === 'navigate' ||

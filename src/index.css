@@ -1364,6 +1364,12 @@ body.menu-open .sticky-header {
    RESPONSIVE — Mobile (≤768px)
    ═══════════════════════════════════════════════════ */
 @media (max-width: 768px) {
+  /* Hide services section and navigation links on mobile */
+  .section-services,
+  .menu-services-item {
+    display: none !important;
+  }
+
   /* Layout */
   .container { padding: 0 1.5rem; }
 

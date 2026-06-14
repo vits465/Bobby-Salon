@@ -12,7 +12,7 @@ const ffmpegPath = require('ffmpeg-static');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
-const collectionDir = path.join(__dirname, 'public', 'gallery', 'collection');
+const collectionDir = path.join(__dirname, '..', '..', 'public', 'gallery', 'collection');
 
 const files = fs.readdirSync(collectionDir);
 const movFiles = files.filter(f => path.extname(f).toLowerCase() === '.mov');
