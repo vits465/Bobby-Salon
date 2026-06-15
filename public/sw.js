@@ -39,6 +39,11 @@ self.addEventListener('fetch', (e) => {
   
   const url = new URL(e.request.url);
 
+  // Skip caching for third-party scripts/requests (like Google Analytics)
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   // Skip caching for large media files (videos) to avoid range request failures (especially on Safari/iOS)
   if (url.pathname.endsWith('.mp4') || url.pathname.endsWith('.webm') || url.pathname.endsWith('.ogg')) {
     return;
