@@ -407,6 +407,18 @@ document.addEventListener('DOMContentLoaded', () => {
           queueInput.value = 'false';
           submitBtn.innerHTML = 'BOOK VIA WHATSAPP &rarr;';
         }
+
+        // Auto-scroll to the submit button to save scrolling on mobile/laptops
+        if (timeInput.value) {
+          setTimeout(() => {
+            submitBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Add a temporary subtle flash highlight to the button to guide focus
+            submitBtn.style.boxShadow = '0 0 20px var(--accent)';
+            setTimeout(() => {
+              submitBtn.style.boxShadow = '';
+            }, 800);
+          }, 150);
+        }
       });
 
       timeSlotGrid.appendChild(btn);
