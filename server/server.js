@@ -651,20 +651,35 @@ app.get('/api/slots', async (req, res) => {
       //  beard_only    slots → 30 min window ÷ 15 min per service = 2 per barber → max 4 total
       //  haircut_beard slots → 40 min window ÷ 40 min per service = 1 per barber → max 2 total
       const perBarberMax = slotDef.type === 'beard_only' ? 2 : 1;
-      const maxBookings  = perBarberMax * 2; // Bobby + Sumit
+      const maxBookings  = perBarberMax * 3; // Bobby + Sumit + shetty Bhai
 
       const bobbyBookings = slotBookings.filter(b => b.barber === 'Bobby');
       const sumitBookings = slotBookings.filter(b => b.barber === 'Sumit');
+      const shettyBookings = slotBookings.filter(b => b.barber === 'shetty Bhai');
       const anyBookings   = slotBookings.filter(b => b.barber === 'Any Available');
 
-      // "Any Available" bookings fill Bobby first, then Sumit
-      const anyCount = anyBookings.length;
-      const effectiveBobbyCount = bobbyBookings.length + Math.min(anyCount, perBarberMax);
-      const effectiveSumitCount = sumitBookings.length + Math.max(anyCount - perBarberMax, 0);
+      // "Any Available" bookings fill Bobby first, then Sumit, then shetty Bhai
+      let remainingAny = anyBookings.length;
+
+      const bobbyNeeded = Math.max(0, perBarberMax - bobbyBookings.length);
+      const bobbyFromAny = Math.min(remainingAny, bobbyNeeded);
+      const effectiveBobbyCount = bobbyBookings.length + bobbyFromAny;
+      remainingAny -= bobbyFromAny;
+
+      const sumitNeeded = Math.max(0, perBarberMax - sumitBookings.length);
+      const sumitFromAny = Math.min(remainingAny, sumitNeeded);
+      const effectiveSumitCount = sumitBookings.length + sumitFromAny;
+      remainingAny -= sumitFromAny;
+
+      const shettyNeeded = Math.max(0, perBarberMax - shettyBookings.length);
+      const shettyFromAny = Math.min(remainingAny, shettyNeeded);
+      const effectiveShettyCount = shettyBookings.length + shettyFromAny;
+      remainingAny -= shettyFromAny;
 
       const bobbyFull = effectiveBobbyCount >= perBarberMax;
       const sumitFull = effectiveSumitCount >= perBarberMax;
-      const isFull    = bobbyFull && sumitFull;
+      const shettyFull = effectiveShettyCount >= perBarberMax;
+      const isFull    = bobbyFull && sumitFull && shettyFull;
 
       const bookingCount = slotBookings.length;
       const spotsLeft = Math.max(maxBookings - bookingCount, 0);
@@ -681,10 +696,12 @@ app.get('/api/slots', async (req, res) => {
         spotsLeft,
         bobbyAvailable: !bobbyFull,
         sumitAvailable: !sumitFull,
+        shettyAvailable: !shettyFull,
         // Detailed per-barber status so UI can show "Bobby: 1/2"
         barberStatus: {
           bobby: { count: effectiveBobbyCount, max: perBarberMax, full: bobbyFull },
-          sumit: { count: effectiveSumitCount, max: perBarberMax, full: sumitFull }
+          sumit: { count: effectiveSumitCount, max: perBarberMax, full: sumitFull },
+          shetty: { count: effectiveShettyCount, max: perBarberMax, full: shettyFull }
         }
       });
     }
@@ -723,7 +740,7 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
     if (!['Male', 'Female'].includes(normalizedGender)) {
       return res.status(400).json({ error: 'Invalid gender.' });
     }
-    if (!['Any Available', 'Bobby', 'Sumit'].includes(normalizedBarber)) {
+    if (!['Any Available', 'Bobby', 'Sumit', 'shetty Bhai'].includes(normalizedBarber)) {
       return res.status(400).json({ error: 'Invalid barber selection.' });
     }
     if (normalizedGender === 'Female' && normalizedBarber !== 'Sumit') {
@@ -812,27 +829,46 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
 
           const bobbyCount = bookingsForSlot.filter(b => b.barber === 'Bobby').length;
           const sumitCount = bookingsForSlot.filter(b => b.barber === 'Sumit').length;
+          const shettyCount = bookingsForSlot.filter(b => b.barber === 'shetty Bhai').length;
           const anyCount   = bookingsForSlot.filter(b => b.barber === 'Any Available').length;
 
-          // "Any" bookings fill Bobby first, then Sumit
-          const effectiveBobby = bobbyCount + Math.min(anyCount, perBarberMax);
-          const effectiveSumit = sumitCount + Math.max(anyCount - perBarberMax, 0);
+          // "Any" bookings fill Bobby first, then Sumit, then shetty Bhai
+          let remainingAny = anyCount;
+
+          const bobbyNeeded = Math.max(0, perBarberMax - bobbyCount);
+          const bobbyFromAny = Math.min(remainingAny, bobbyNeeded);
+          const effectiveBobby = bobbyCount + bobbyFromAny;
+          remainingAny -= bobbyFromAny;
+
+          const sumitNeeded = Math.max(0, perBarberMax - sumitCount);
+          const sumitFromAny = Math.min(remainingAny, sumitNeeded);
+          const effectiveSumit = sumitCount + sumitFromAny;
+          remainingAny -= sumitFromAny;
+
+          const shettyNeeded = Math.max(0, perBarberMax - shettyCount);
+          const shettyFromAny = Math.min(remainingAny, shettyNeeded);
+          const effectiveShetty = shettyCount + shettyFromAny;
+          remainingAny -= shettyFromAny;
 
           const bobbyFull = effectiveBobby >= perBarberMax;
           const sumitFull = effectiveSumit >= perBarberMax;
+          const shettyFull = effectiveShetty >= perBarberMax;
 
           if (normalizedBarber === 'Bobby') {
             if (bobbyFull) {
-              const slotsLeft = perBarberMax - effectiveBobby;
               throw httpError(400, `Bobby is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
             }
           } else if (normalizedBarber === 'Sumit') {
             if (sumitFull) {
               throw httpError(400, `Sumit is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
             }
+          } else if (normalizedBarber === 'shetty Bhai') {
+            if (shettyFull) {
+              throw httpError(400, `shetty Bhai is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
+            }
           } else if (normalizedBarber === 'Any Available') {
-            if (bobbyFull && sumitFull) {
-              throw httpError(400, 'This slot is fully booked. Both barbers are at full capacity. Please choose another slot.');
+            if (bobbyFull && sumitFull && shettyFull) {
+              throw httpError(400, 'This slot is fully booked. All barbers are at full capacity. Please choose another slot.');
             }
           }
 

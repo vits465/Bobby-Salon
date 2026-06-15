@@ -153,6 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <option value="Any Available">Any Available</option>
         <option value="Bobby">Bobby</option>
         <option value="Sumit">Sumit</option>
+        <option value="shetty Bhai">shetty Bhai</option>
       `;
     } else if (gender === 'Female') {
       barberInput.innerHTML = `
@@ -351,6 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Barber pills — now use object {count, max, full}
       const bStatus = slot.barberStatus?.bobby;
       const sStatus = slot.barberStatus?.sumit;
+      const shStatus = slot.barberStatus?.shetty;
 
       const bobbyBg    = bStatus?.full ? 'rgba(180,0,0,0.12)' : 'rgba(40,160,70,0.10)';
       const bobbyClr   = bStatus?.full ? 'rgba(180,0,0,0.85)' : 'rgba(30,140,60,0.9)';
@@ -362,8 +364,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const sumitLabel = sStatus ? `Sumit ${sStatus.count}/${sStatus.max}` : 'Sumit';
       const sumitIcon  = sStatus?.full ? '✗' : '✓';
 
+      const shettyBg    = shStatus?.full ? 'rgba(180,0,0,0.12)' : 'rgba(40,160,70,0.10)';
+      const shettyClr   = shStatus?.full ? 'rgba(180,0,0,0.85)' : 'rgba(30,140,60,0.9)';
+      const shettyLabel = shStatus ? `Shetty ${shStatus.count}/${shStatus.max}` : 'Shetty';
+      const shettyIcon  = shStatus?.full ? '✗' : '✓';
+
       const bobbyPill = `<span style="font-size:0.58rem;background:${bobbyBg};color:${bobbyClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${bobbyIcon} ${bobbyLabel}</span>`;
       const sumitPill = `<span style="font-size:0.58rem;background:${sumitBg};color:${sumitClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${sumitIcon} ${sumitLabel}</span>`;
+      const shettyPill = `<span style="font-size:0.58rem;background:${shettyBg};color:${shettyClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${shettyIcon} ${shettyLabel}</span>`;
 
       btn.className = `slot-btn hover-target ${isTaken ? 'taken' : ''} ${isHidden ? 'slot-hidden-type' : ''}`;
       btn.style.animationDelay = `${index * 30}ms`;
@@ -374,7 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="slot-time-range">${slot.label || slot.time}</div>
           <div class="slot-type-badge" style="background:${slotTypeColorLight};color:${slotTypeColor};">${slotTypeLabel}</div>
           <div class="slot-status-row">${statusHtml}</div>
-          <div class="slot-barber-row">${bobbyPill} ${sumitPill}</div>
+          <div class="slot-barber-row">${bobbyPill} ${sumitPill} ${shettyPill}</div>
         </div>
       `;
 
