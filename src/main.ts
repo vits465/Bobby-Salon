@@ -7,6 +7,59 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  const escapeHtml = (str: string): string => {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast-message toast-${type}`;
+
+    let icon = 'ℹ️';
+    if (type === 'success') icon = '✅';
+    else if (type === 'error') icon = '❌';
+
+    toast.innerHTML = `
+      <span class="toast-icon">${icon}</span>
+      <div class="toast-content">${escapeHtml(message)}</div>
+      <button class="toast-close">&times;</button>
+    `;
+
+    container.appendChild(toast);
+
+    // Trigger transition
+    setTimeout(() => {
+      toast.classList.add('toast-show');
+    }, 10);
+
+    const closeToast = () => {
+      toast.classList.remove('toast-show');
+      const onTransitionEnd = () => {
+        toast.remove();
+        toast.removeEventListener('transitionend', onTransitionEnd);
+      };
+      toast.addEventListener('transitionend', onTransitionEnd);
+    };
+
+    toast.querySelector('.toast-close')?.addEventListener('click', closeToast);
+
+    // Auto-remove after 4 seconds
+    setTimeout(closeToast, 4000);
+  };
+
   // Custom Cursor Logic — GPU-optimized
   const cursor = document.querySelector('.custom-cursor') as HTMLDivElement;
 
@@ -480,7 +533,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (!res.ok) {
           const errorData = await res.json();
-          alert(errorData.error || 'Failed to book slot');
+          showToast(errorData.error || 'Failed to book slot', 'error');
           submitBtn.disabled = false;
           submitBtn.innerHTML = 'BOOK VIA WHATSAPP &rarr;';
           return;
@@ -572,7 +625,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
       } catch {
-        alert('Server error while booking.');
+        showToast('Server error while booking.', 'error');
         submitBtn.disabled = false;
         submitBtn.innerHTML = 'BOOK VIA WHATSAPP &rarr;';
       }
@@ -730,6 +783,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   let adminPassword = sessionStorage.getItem('adminPassword') || '';
+  let adminRole = sessionStorage.getItem('adminRole') || 'staff';
 
   const authFetch = async (url: string, options: RequestInit = {}) => {
     const headers = new Headers(options.headers || {});
@@ -737,16 +791,6 @@ document.addEventListener('DOMContentLoaded', () => {
       headers.set('Authorization', `Bearer ${adminPassword}`);
     }
     return fetch(url, { ...options, headers });
-  };
-
-  const escapeHtml = (str: string): string => {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
   };
 
   let adminRefreshInterval: any = null;
@@ -863,8 +907,11 @@ document.addEventListener('DOMContentLoaded', () => {
           testHeaders.set('Authorization', `Bearer ${pwd}`);
           const res = await fetch('/api/admin/bookings', { headers: testHeaders });
           if (res.ok) {
+            const data = await res.json();
             adminPassword = pwd;
+            adminRole = data.role || 'staff';
             sessionStorage.setItem('adminPassword', pwd);
+            sessionStorage.setItem('adminRole', adminRole);
             
             // Hide public page content
             Array.from(document.body.children).forEach(child => {
@@ -890,11 +937,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
           } else {
             sessionStorage.removeItem('adminPassword');
+            sessionStorage.removeItem('adminRole');
             adminPassword = '';
+            adminRole = 'staff';
           }
         } catch {
           sessionStorage.removeItem('adminPassword');
+          sessionStorage.removeItem('adminRole');
           adminPassword = '';
+          adminRole = 'staff';
         }
       }
 
@@ -954,6 +1005,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await authFetch('/api/admin/bookings');
       const data = await res.json();
+      adminRole = data.role || 'staff';
+      sessionStorage.setItem('adminRole', adminRole);
       
       const todayStr = new Date().toISOString().split('T')[0];
       const totalToday = data.bookedSlots.filter((b: any) => b.date === todayStr).length;
@@ -1054,12 +1107,13 @@ document.addEventListener('DOMContentLoaded', () => {
                  
       data.bookedSlots.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime() || a.time.localeCompare(b.time));
       data.bookedSlots.forEach((b: any) => {
+        const deleteBtn = adminRole === 'owner' ? `<button class="admin-action-btn hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}" style="background: transparent; color: red; border: 1px solid red; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>` : '';
         html += `<tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)}" style="border-bottom: 1px solid rgba(0,0,0,0.1); transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.5)'" onmouseout="this.style.background='transparent'">
         <td style="padding: 1rem;">${escapeHtml(b.date)}</td><td style="padding: 1rem;"><strong>${escapeHtml(b.time)}</strong></td><td style="padding: 1rem;">${escapeHtml(b.name)}</td>
         <td style="padding: 1rem;">${escapeHtml(b.phone)}</td><td style="padding: 1rem;">${escapeHtml(b.service)}</td><td style="padding: 1rem;">${escapeHtml(b.barber || 'N/A')}</td>
         <td style="padding: 1rem;">
           <button class="admin-action-btn hover-target" data-action="complete" data-id="${escapeHtml(b.createdAt)}" style="background: var(--theme-main); color: white; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; margin-right: 5px; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Complete</button>
-          <button class="admin-action-btn hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}" style="background: transparent; color: red; border: 1px solid red; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>
+          ${deleteBtn}
         </td></tr>`;
       });
       html += '</table></div>';
@@ -1069,12 +1123,13 @@ document.addEventListener('DOMContentLoaded', () => {
                  '<tr style="border-bottom: 2px solid var(--theme-main); color: var(--theme-main); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase;">' +
                  '<th style="padding: 1rem;">Date</th><th style="padding: 1rem;">Time</th><th style="padding: 1rem;">Name</th><th style="padding: 1rem;">Phone</th><th style="padding: 1rem;">Service</th><th style="padding: 1rem;">Barber</th><th style="padding: 1rem;">Actions</th></tr>';
       data.queue.forEach((b: any) => {
+        const deleteBtn = adminRole === 'owner' ? `<button class="admin-action-btn hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}" style="background: transparent; color: red; border: 1px solid red; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>` : '';
         html += `<tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)}" style="border-bottom: 1px solid rgba(0,0,0,0.1); transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.5)'" onmouseout="this.style.background='transparent'">
         <td style="padding: 1rem;">${escapeHtml(b.date)}</td><td style="padding: 1rem;"><strong>${escapeHtml(b.time)}</strong></td><td style="padding: 1rem;">${escapeHtml(b.name)}</td>
         <td style="padding: 1rem;">${escapeHtml(b.phone)}</td><td style="padding: 1rem;">${escapeHtml(b.service)}</td><td style="padding: 1rem;">${escapeHtml(b.barber || 'N/A')}</td>
         <td style="padding: 1rem;">
           <button class="admin-action-btn hover-target" data-action="approve" data-id="${escapeHtml(b.createdAt)}" style="background: transparent; color: var(--theme-main); border: 1px solid var(--theme-main); padding: 8px 16px; border-radius: 20px; cursor: pointer; margin-right: 5px; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Approve</button>
-          <button class="admin-action-btn hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}" style="background: transparent; color: red; border: 1px solid red; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; text-transform: uppercase;">Delete</button>
+          ${deleteBtn}
         </td></tr>`;
       });
       html += '</table></div>';
@@ -1209,14 +1264,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ date, time, name, phone, gender, service, barber, isQueue: false })
               });
               if (res.ok) {
-                alert('Manual booking created successfully!');
+                showToast('Manual booking created successfully!', 'success');
                 fetchAdminData();
               } else {
                 const err = await res.json();
-                alert(err.error || 'Failed to book slot');
+                showToast(err.error || 'Failed to book slot', 'error');
               }
             } catch {
-              alert('Network error while manual booking.');
+              showToast('Network error while manual booking.', 'error');
             }
           });
         }
@@ -1431,8 +1486,19 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       `;
 
+      if (adminRole === 'staff') {
+        const staffHiddenTabs = ['tab-services', 'tab-analytics', 'tab-gallery', 'tab-settings'];
+        staffHiddenTabs.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.style.display = 'none';
+        });
+      }
+
       // Tab switcher
       (window as any)._adminTab = (tab: string) => {
+        if (adminRole === 'staff' && tab !== 'bookings') {
+          return;
+        }
         const bPanel = document.getElementById('panel-bookings')!;
         const svPanel = document.getElementById('panel-services')!;
         const aPanel = document.getElementById('panel-analytics')!;
@@ -1533,8 +1599,8 @@ document.addEventListener('DOMContentLoaded', () => {
           target.textContent = '…';
           target.style.opacity = '0.5';
           const res = await authFetch(`/api/admin/gallery/${encodeURIComponent(publicId)}`, { method: 'DELETE' });
-          if (res.ok) { fetchGalleryData(); }
-          else { alert('Delete failed'); target.textContent = 'Delete'; target.style.opacity = '1'; }
+          if (res.ok) { showToast('Media deleted successfully!', 'success'); fetchGalleryData(); }
+          else { showToast('Delete failed', 'error'); target.textContent = 'Delete'; target.style.opacity = '1'; }
           return;
         }
 
@@ -1550,8 +1616,8 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ newName: `${newName}.${ext}` })
           });
-          if (res.ok) { fetchGalleryData(); }
-          else { alert('Rename failed'); }
+          if (res.ok) { showToast('Media renamed successfully!', 'success'); fetchGalleryData(); }
+          else { showToast('Rename failed', 'error'); }
           return;
         }
 
@@ -1567,8 +1633,17 @@ document.addEventListener('DOMContentLoaded', () => {
         target.textContent = '…'; target.style.opacity = '0.5';
         try {
           const res = await authFetch(url, { method });
-          if (res.ok) fetchAdminData(); else { alert('Action failed'); fetchAdminData(); }
-        } catch { alert('Network error'); fetchAdminData(); }
+          if (res.ok) {
+            showToast(action === 'delete' ? 'Booking deleted successfully!' : (action === 'complete' ? 'Booking marked as completed!' : 'Queue approved successfully!'), 'success');
+            fetchAdminData();
+          } else {
+            showToast('Action failed', 'error');
+            fetchAdminData();
+          }
+        } catch {
+          showToast('Network error', 'error');
+          fetchAdminData();
+        }
       });
 
       // Settings timing form submit handler
@@ -1594,13 +1669,13 @@ document.addEventListener('DOMContentLoaded', () => {
               })
             });
             if (res.ok) {
-              alert('Operating hours updated successfully!');
+              showToast('Operating hours updated successfully!', 'success');
               fetchSettingsData();
             } else {
-              alert('Failed to update operating hours.');
+              showToast('Failed to update operating hours.', 'error');
             }
           } catch {
-            alert('Network error while saving settings.');
+            showToast('Network error while saving settings.', 'error');
           }
         });
       }
@@ -1621,14 +1696,14 @@ document.addEventListener('DOMContentLoaded', () => {
               body: JSON.stringify({ action: 'add', date })
             });
             if (res.ok) {
-              alert(`Blocked appointments for ${date}!`);
+              showToast(`Blocked appointments for ${date}!`, 'success');
               dateInput.value = '';
               fetchSettingsData();
             } else {
-              alert('Failed to block date.');
+              showToast('Failed to block date.', 'error');
             }
           } catch {
-            alert('Network error.');
+            showToast('Network error.', 'error');
           }
         });
       }
@@ -1649,12 +1724,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ action: 'remove', date })
               });
               if (res.ok) {
+                showToast(`Unblocked appointments for ${date}!`, 'success');
                 fetchSettingsData();
               } else {
-                alert('Failed to unblock date.');
+                showToast('Failed to unblock date.', 'error');
               }
             } catch {
-              alert('Network error.');
+              showToast('Network error.', 'error');
             }
           }
         });
@@ -2245,15 +2321,16 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ visible: newVisible })
         });
         if (res.ok) {
+          showToast('Service visibility updated!', 'success');
           await fetchServices();
           fetchAdminServicesData();
         } else {
-          alert('Failed to update visibility.');
+          showToast('Failed to update visibility.', 'error');
           (target as HTMLButtonElement).disabled = false;
           target.textContent = currentlyVisible ? '🙈 Hide' : '👁 Show';
         }
       } catch {
-        alert('Network error.');
+        showToast('Network error.', 'error');
         (target as HTMLButtonElement).disabled = false;
       }
       return;
@@ -2266,10 +2343,11 @@ document.addEventListener('DOMContentLoaded', () => {
       target.style.opacity = '0.5';
       const res = await authFetch(`/api/admin/services/${id}`, { method: 'DELETE' });
       if (res.ok) {
+        showToast('Service deleted successfully!', 'success');
         await fetchServices();
         fetchAdminServicesData();
       } else {
-        alert('Delete failed');
+        showToast('Delete failed', 'error');
         target.textContent = 'Delete';
         target.style.opacity = '1';
       }
@@ -2342,16 +2420,16 @@ document.addEventListener('DOMContentLoaded', () => {
           });
 
           if (res.ok) {
-            alert(id ? 'Service updated successfully!' : 'Service created successfully!');
+            showToast(id ? 'Service updated successfully!' : 'Service created successfully!', 'success');
             formWrap.style.display = 'none';
             form.reset();
             await fetchServices();
             fetchAdminServicesData();
           } else {
-            alert('Failed to save service.');
+            showToast('Failed to save service.', 'error');
           }
         } catch {
-          alert('Network error while saving service.');
+          showToast('Network error while saving service.', 'error');
         }
       });
     }

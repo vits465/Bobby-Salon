@@ -94,14 +94,22 @@ async function seedAdminsIfNeeded() {
   try {
     const adminsCol = getAdminsCollection();
     const count = await adminsCol.countDocuments();
+    const defaultPassword = process.env.ADMIN_PASSWORD || 'bobby123';
+    
+    const usernames = [
+      { name: 'admin', role: 'owner' },
+      { name: 'bobby', role: 'owner' },
+      { name: 'sumit', role: 'staff' },
+      { name: 'receptionist', role: 'staff' }
+    ];
+
     if (count === 0) {
-      const defaultPassword = process.env.ADMIN_PASSWORD || 'bobby123';
-      const usernames = ['admin', 'bobby', 'sumit', 'receptionist'];
-      const adminDocs = usernames.map(username => {
+      const adminDocs = usernames.map(u => {
         const salt = generateSalt();
         const passwordHash = hashPassword(defaultPassword, salt);
         return {
-          username: username.toLowerCase(),
+          username: u.name.toLowerCase(),
+          role: u.role,
           salt,
           passwordHash,
           createdAt: new Date()
@@ -109,6 +117,14 @@ async function seedAdminsIfNeeded() {
       });
       await adminsCol.insertMany(adminDocs);
       console.log("🌱 Default admins seeded successfully in database!");
+    } else {
+      // Ensure existing seeded admins have roles
+      for (const u of usernames) {
+        await adminsCol.updateOne(
+          { username: u.name.toLowerCase(), role: { $exists: false } },
+          { $set: { role: u.role } }
+        );
+      }
     }
   } catch (err) {
     console.error("❌ Failed to seed admins:", err);
@@ -152,6 +168,30 @@ async function requireAdmin(req, res, next) {
 
   return res.status(401).json({ error: 'Unauthorized' });
 }
+
+function requireRole(allowedRoles) {
+  return async (req, res, next) => {
+    try {
+      const username = req.adminUsername;
+      if (username === 'legacy-admin') {
+        return next();
+      }
+
+      const adminsCol = getAdminsCollection();
+      const user = await adminsCol.findOne({ username });
+      const userRole = (user && user.role) ? user.role : 'staff';
+
+      if (!allowedRoles.includes(userRole)) {
+        return res.status(403).json({ error: 'Forbidden: Insufficient privileges' });
+      }
+      next();
+    } catch (err) {
+      console.error('Error verifying user role:', err);
+      res.status(500).json({ error: 'Server error during authorization' });
+    }
+  };
+}
+
 app.use((req, res, next) => {
   cleanInput(req.body);
   cleanInput(req.query);
@@ -198,7 +238,7 @@ app.post('/api/auth/login', async (req, res) => {
       createdAt: new Date()
     });
 
-    res.json({ token, username: admin.username });
+    res.json({ token, username: admin.username, role: admin.role || 'staff' });
   } catch (err) {
     console.error('Error logging in admin:', err);
     res.status(500).json({ error: 'Server error during login.' });
@@ -862,7 +902,7 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
-app.post('/api/settings', requireAdmin, async (req, res) => {
+app.post('/api/settings', requireAdmin, requireRole(['owner']), async (req, res) => {
   try {
     const settings = getSettingsCollection();
     const { weekday, saturday, sunday } = req.body;
@@ -913,7 +953,7 @@ app.get('/api/settings/blocked-dates', async (req, res) => {
 });
 
 // POST /api/settings/blocked-dates
-app.post('/api/settings/blocked-dates', requireAdmin, async (req, res) => {
+app.post('/api/settings/blocked-dates', requireAdmin, requireRole(['owner']), async (req, res) => {
   try {
     const settings = getSettingsCollection();
     const { action, date } = req.body;
@@ -975,7 +1015,7 @@ app.get('/api/admin/services', async (req, res) => {
 });
 
 // POST /api/admin/services
-app.post('/api/admin/services', async (req, res) => {
+app.post('/api/admin/services', requireRole(['owner']), async (req, res) => {
   try {
     const servicePayload = normalizeServicePayload(req.body);
     if (!servicePayload) {
@@ -995,7 +1035,7 @@ app.post('/api/admin/services', async (req, res) => {
 });
 
 // PUT /api/admin/services/:id
-app.put('/api/admin/services/:id', async (req, res) => {
+app.put('/api/admin/services/:id', requireRole(['owner']), async (req, res) => {
   try {
     const id = validateObjectId(req.params.id);
     const servicePayload = normalizeServicePayload(req.body);
@@ -1016,7 +1056,7 @@ app.put('/api/admin/services/:id', async (req, res) => {
 });
 
 // PATCH /api/admin/services/:id/visibility  — toggle show/hide
-app.patch('/api/admin/services/:id/visibility', async (req, res) => {
+app.patch('/api/admin/services/:id/visibility', requireRole(['owner']), async (req, res) => {
   try {
     const id = validateObjectId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid service id' });
@@ -1032,7 +1072,7 @@ app.patch('/api/admin/services/:id/visibility', async (req, res) => {
 });
 
 // DELETE /api/admin/services/:id
-app.delete('/api/admin/services/:id', async (req, res) => {
+app.delete('/api/admin/services/:id', requireRole(['owner']), async (req, res) => {
   try {
     const id = validateObjectId(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid service id' });
@@ -1077,7 +1117,20 @@ app.get('/api/admin/bookings', async (req, res) => {
       queueCol.find({}).toArray()
     ]);
 
-    res.json({ bookedSlots, completedSlots, queue });
+    // Also look up role
+    const username = req.adminUsername;
+    let role = 'staff';
+    if (username === 'legacy-admin') {
+      role = 'owner';
+    } else {
+      const adminsCol = getAdminsCollection();
+      const user = await adminsCol.findOne({ username });
+      if (user && user.role) {
+        role = user.role;
+      }
+    }
+
+    res.json({ bookedSlots, completedSlots, queue, role });
   } catch (err) {
     console.error('Error fetching admin bookings:', err);
     res.status(500).json({ error: 'Server error' });
@@ -1085,7 +1138,7 @@ app.get('/api/admin/bookings', async (req, res) => {
 });
 
 // DELETE /api/admin/bookings/:id
-app.delete('/api/admin/bookings/:id', async (req, res) => {
+app.delete('/api/admin/bookings/:id', requireRole(['owner']), async (req, res) => {
   try {
     const id = req.params.id;
     const bookings = getBookingsCollection();
@@ -1150,7 +1203,7 @@ app.post('/api/admin/queue/:id/approve', async (req, res) => {
 // ─── Gallery CRUD (Cloudinary) ───────────────────────────────────────────────
 
 // POST /api/admin/gallery/upload — upload one or more files to Cloudinary
-app.post('/api/admin/gallery/upload', upload.array('files', 30), async (req, res) => {
+app.post('/api/admin/gallery/upload', requireRole(['owner']), upload.array('files', 30), async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ error: 'No files uploaded' });
   }
@@ -1184,7 +1237,7 @@ app.post('/api/admin/gallery/upload', upload.array('files', 30), async (req, res
 });
 
 // DELETE /api/admin/gallery/:public_id — delete a file from Cloudinary
-app.delete('/api/admin/gallery/:public_id', async (req, res) => {
+app.delete('/api/admin/gallery/:public_id', requireRole(['owner']), async (req, res) => {
   const public_id = decodeURIComponent(req.params.public_id);
 
   try {
@@ -1214,7 +1267,7 @@ app.delete('/api/admin/gallery/:public_id', async (req, res) => {
 });
 
 // PATCH /api/admin/gallery/:public_id — rename a file (update display name)
-app.patch('/api/admin/gallery/:public_id', async (req, res) => {
+app.patch('/api/admin/gallery/:public_id', requireRole(['owner']), async (req, res) => {
   const public_id = decodeURIComponent(req.params.public_id);
   const { newName } = req.body;
   if (!newName) return res.status(400).json({ error: 'newName is required' });
@@ -1245,7 +1298,7 @@ app.patch('/api/admin/gallery/:public_id', async (req, res) => {
 });
 
 // PUT /api/admin/gallery/order — save the display order
-app.put('/api/admin/gallery/order', async (req, res) => {
+app.put('/api/admin/gallery/order', requireRole(['owner']), async (req, res) => {
   const { order } = req.body;
   if (!Array.isArray(order)) {
     return res.status(400).json({ error: 'order must be an array' });
