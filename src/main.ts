@@ -873,7 +873,7 @@ document.addEventListener('DOMContentLoaded', () => {
           errorMsg.textContent = data.error || 'Invalid username or password.';
           errorMsg.style.display = 'block';
         }
-      } catch (err) {
+      } catch {
         errorMsg.textContent = 'Network error. Please try again.';
         errorMsg.style.display = 'block';
       }
