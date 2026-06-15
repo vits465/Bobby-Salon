@@ -2023,3 +2023,40 @@ input:invalid:not(:placeholder-shown) ~ label {
     font-size: 0.55rem;
   }
 }
+
+/* Bobby Salon — Cross-browser select normalization & iOS auto-zoom prevention */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px !important;
+  cursor: pointer;
+}
+
+/* Remove default iOS blue highlight on tap */
+select:focus {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Fix for iOS Safari zoom on focus (font-size must be 16px+) */
+select,
+input[type="text"],
+input[type="email"],
+input[type="tel"],
+input[type="date"],
+textarea {
+  font-size: 16px !important; /* Prevents iOS auto-zoom on focus */
+}
+
+/* Focus ring for keyboard navigation — does not change visual for mouse users */
+:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
