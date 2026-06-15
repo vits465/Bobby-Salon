@@ -615,6 +615,11 @@ app.get('/api/slots', async (req, res) => {
 
     const indiaNow = getIndiaNow();
     const todayDateStr = getIndiaDateString(indiaNow);
+    
+    if (date < todayDateStr) {
+      return res.json({ date, slots: [], closed: true, message: 'Cannot query or book slots in the past.' });
+    }
+
     const nowMinutes = indiaNow.getHours() * 60 + indiaNow.getMinutes();
     const isToday = date === todayDateStr;
 

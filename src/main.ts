@@ -248,10 +248,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Set today's date as default
+  // Set today's date as default and restrict past dates
   if (dateInput) {
     const today = new Date().toISOString().split('T')[0];
     dateInput.value = today;
+    dateInput.min = today;
   }
 
   let currentSlotsData: any[] = [];
@@ -517,6 +518,20 @@ document.addEventListener('DOMContentLoaded', () => {
         error.style.cssText = 'color: #E24B4A; font-size: 12px; display: block; margin-top: 4px; font-family: var(--font-mono);';
         error.textContent = 'Enter a valid 10-digit Indian mobile number';
         fields.phone.parentNode?.appendChild(error);
+      }
+    }
+
+    // Past date validation
+    if (fields.date && fields.date.value) {
+      const today = new Date().toISOString().split('T')[0];
+      if (fields.date.value < today) {
+        isValid = false;
+        fields.date.style.borderColor = '#E24B4A';
+        const error = document.createElement('span');
+        error.className = 'booking-error';
+        error.style.cssText = 'color: #E24B4A; font-size: 12px; display: block; margin-top: 4px; font-family: var(--font-mono);';
+        error.textContent = 'Cannot book an appointment in the past';
+        fields.date.parentNode?.appendChild(error);
       }
     }
 
