@@ -390,12 +390,71 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchSlots(dateInput.value);
   }
 
+  function validateBookingForm(): boolean {
+    const fields = {
+      name: document.getElementById('b-name') as HTMLInputElement,
+      phone: document.getElementById('b-phone') as HTMLInputElement,
+      gender: document.getElementById('b-gender') as HTMLSelectElement,
+      service: document.getElementById('b-service') as HTMLSelectElement,
+      barber: document.getElementById('b-barber') as HTMLSelectElement,
+      date: document.getElementById('b-date') as HTMLInputElement,
+      time: document.getElementById('b-time') as HTMLInputElement,
+    };
+
+    let isValid = true;
+
+    // Remove old error messages
+    document.querySelectorAll('.booking-error').forEach(el => el.remove());
+    
+    // Reset border colors
+    Object.values(fields).forEach(field => {
+      if (field) field.style.borderColor = '';
+    });
+
+    Object.entries(fields).forEach(([key, field]) => {
+      if (!field) return;
+      const value = field.value.trim();
+      
+      if (!value || value === '' || value === 'Select' || value === '--') {
+        isValid = false;
+        const error = document.createElement('span');
+        error.className = 'booking-error';
+        error.style.cssText = 'color: #E24B4A; font-size: 12px; display: block; margin-top: 4px; font-family: var(--font-mono);';
+        
+        if (key === 'time') {
+          error.textContent = 'Please select a time slot from the grid';
+          const grid = document.getElementById('time-slot-grid');
+          grid?.parentNode?.appendChild(error);
+        } else {
+          error.textContent = `Please fill in your ${key}`;
+          field.parentNode?.appendChild(error);
+          field.style.borderColor = '#E24B4A';
+        }
+      }
+    });
+
+    // Phone number validation (Indian mobile: 10 digits starting with 6-9)
+    if (fields.phone && fields.phone.value) {
+      const phoneVal = fields.phone.value.replace(/\s/g, '');
+      if (!/^[6-9]\d{9}$/.test(phoneVal)) {
+        isValid = false;
+        fields.phone.style.borderColor = '#E24B4A';
+        const error = document.createElement('span');
+        error.className = 'booking-error';
+        error.style.cssText = 'color: #E24B4A; font-size: 12px; display: block; margin-top: 4px; font-family: var(--font-mono);';
+        error.textContent = 'Enter a valid 10-digit Indian mobile number';
+        fields.phone.parentNode?.appendChild(error);
+      }
+    }
+
+    return isValid;
+  }
+
   if (bookingForm) {
     bookingForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       
-      if (!timeInput.value) {
-        alert('Please select a time slot or join a waitlist queue before submitting.');
+      if (!validateBookingForm()) {
         return;
       }
       
@@ -527,18 +586,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const menuBackdrop = document.getElementById('menu-backdrop') as HTMLDivElement;
   const menuLinks = document.querySelectorAll('.menu-links a');
 
+  let scrollPos = 0;
+
   function openMenu() {
     fullscreenMenu.classList.add('active');
     menuBackdrop?.classList.add('active');
     document.body.classList.add('menu-open');
+    
+    scrollPos = window.scrollY;
     document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollPos}px`;
+    document.body.style.width = '100%';
+
+    // Trap focus inside menu for accessibility: focus on close button
+    closeBtn?.focus();
   }
 
   function closeMenu() {
     fullscreenMenu.classList.remove('active');
     menuBackdrop?.classList.remove('active');
     document.body.classList.remove('menu-open');
+    
     document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    window.scrollTo(0, scrollPos);
   }
 
   menuBtn?.addEventListener('click', openMenu);
@@ -2296,6 +2370,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Reset filters to ALL and search input to empty on page load
+  if (searchInputCatalog) {
+    searchInputCatalog.value = '';
+  }
+  const allTab = document.querySelector('.filter-tab[data-filter="all"]');
+  if (allTab) {
+    filterTabs.forEach(t => t.classList.remove('active'));
+    allTab.classList.add('active');
+  }
+
   // Service Worker Registration for PWA
   if ('serviceWorker' in navigator) {
     const hasController = !!navigator.serviceWorker.controller;
@@ -2304,6 +2388,16 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').then(reg => {
         console.log('✅ ServiceWorker registered with scope: ', reg.scope);
+
+        // Force check for updates on load
+        reg.update();
+
+        // Check for updates when user returns to the page
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            reg.update();
+          }
+        });
 
         // Check for updates periodically or on page interaction
         reg.addEventListener('updatefound', () => {
