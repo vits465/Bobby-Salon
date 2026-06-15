@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://bobby-salon-ruddy.vercel.app/sitemap.xml
+Sitemap: https://bobbysalon.in/sitemap.xml

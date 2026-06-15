@@ -28,11 +28,12 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
-    // Allow localhost, explicitly listed origins, and any Vercel deployment
+    // Allow localhost, explicitly listed origins, Vercel deployments, and the custom domain bobbysalon.in
     if (
       allowedOrigins.includes(origin) ||
       /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
-      /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin)
+      /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin) ||
+      /^https?:\/\/(www\.)?bobbysalon\.in$/.test(origin)
     ) {
       return callback(null, true);
     }
