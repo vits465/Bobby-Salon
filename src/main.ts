@@ -17,6 +17,16 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/'/g, '&#039;');
   };
 
+  const getIndiaDateString = (): string => {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(new Date());
+  };
+
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     let container = document.getElementById('toast-container');
     if (!container) {
@@ -250,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Set today's date as default and restrict past dates
   if (dateInput) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getIndiaDateString();
     dateInput.value = today;
     dateInput.min = today;
   }
@@ -458,6 +468,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Fetch slots when date changes
   if (dateInput) {
     dateInput.addEventListener('change', (e) => {
+      if (timeInput) timeInput.value = '';
+      if (queueInput) queueInput.value = 'false';
+      if (submitBtn) submitBtn.innerHTML = 'BOOK VIA WHATSAPP &rarr;';
       fetchSlots((e.target as HTMLInputElement).value);
     });
     // Initial fetch
@@ -523,7 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Past date validation
     if (fields.date && fields.date.value) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getIndiaDateString();
       if (fields.date.value < today) {
         isValid = false;
         fields.date.style.borderColor = '#E24B4A';
@@ -1043,7 +1056,7 @@ document.addEventListener('DOMContentLoaded', () => {
       adminRole = data.role || 'staff';
       sessionStorage.setItem('adminRole', adminRole);
       
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getIndiaDateString();
       const totalToday = data.bookedSlots.filter((b: any) => b.date === todayStr).length;
       const totalWaitlist = data.queue.length;
       const totalCompleted = data.completedSlots.length;
@@ -1255,7 +1268,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const mbDate = document.getElementById('mb-date') as HTMLInputElement;
         const mbTime = document.getElementById('mb-time') as HTMLSelectElement;
         if (mbDate && mbTime) {
-          mbDate.addEventListener('change', async () => {
+          const today = getIndiaDateString();
+          mbDate.min = today;
+          mbDate.value = today;
+
+          const loadMbSlots = async () => {
             const date = mbDate.value;
             mbTime.innerHTML = '<option value="" disabled selected>Loading slots...</option>';
             try {
@@ -1274,9 +1291,16 @@ document.addEventListener('DOMContentLoaded', () => {
               });
             } catch {
               mbTime.innerHTML = '<option value="" disabled selected>Error loading slots</option>';
-
             }
+          };
+
+          mbDate.addEventListener('change', () => {
+            mbTime.value = '';
+            loadMbSlots();
           });
+
+          // Load today's slots initially
+          loadMbSlots();
         }
 
         // Handle manual booking submit

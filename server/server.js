@@ -413,17 +413,14 @@ function isValidDateString(dateStr) {
   );
 }
 
-function getIndiaNow() {
-  const now = new Date();
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  return new Date(utc + (3600000 * 5.5));
-}
-
-function getIndiaDateString(date = getIndiaNow()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+function getIndiaDateString() {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  return formatter.format(new Date());
 }
 
 function parseSlotHour(time) {
@@ -440,16 +437,25 @@ function parseSlotHour(time) {
 }
 
 function isPastSlot(dateStr, time) {
-  const indiaNow = getIndiaNow();
-  const today = getIndiaDateString(indiaNow);
+  const today = getIndiaDateString();
   if (dateStr < today) return true;
   if (dateStr > today) return false;
 
   const slot = parseSlotHour(time);
   if (!slot) return true;
-  const slotTime = new Date(indiaNow);
-  slotTime.setHours(slot.hour, slot.minute, 0, 0);
-  return indiaNow > slotTime;
+
+  const indiaTimeStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(new Date());
+
+  const [nowHour, nowMinute] = indiaTimeStr.split(':').map(Number);
+  const nowMinutes = nowHour * 60 + nowMinute;
+  const slotMinutes = slot.hour * 60 + slot.minute;
+
+  return nowMinutes > slotMinutes;
 }
 
 function validateObjectId(id) {
@@ -613,15 +619,24 @@ app.get('/api/slots', async (req, res) => {
     const servicesList = await servicesCol.find({}).toArray();
     const servicesMap = new Map(servicesList.map(s => [s.name, s]));
 
-    const indiaNow = getIndiaNow();
-    const todayDateStr = getIndiaDateString(indiaNow);
+    const todayDateStr = getIndiaDateString();
     
     if (date < todayDateStr) {
       return res.json({ date, slots: [], closed: true, message: 'Cannot query or book slots in the past.' });
     }
 
-    const nowMinutes = indiaNow.getHours() * 60 + indiaNow.getMinutes();
     const isToday = date === todayDateStr;
+    let nowMinutes = 0;
+    if (isToday) {
+      const indiaTimeStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).format(new Date());
+      const [nowHour, nowMinute] = indiaTimeStr.split(':').map(Number);
+      nowMinutes = nowHour * 60 + nowMinute;
+    }
 
     const slotsStatus = [];
 
