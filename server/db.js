@@ -26,10 +26,26 @@ export async function connectDB() {
     await client.connect();
     db = client.db(MONGODB_DB);
     console.log(`✅ Connected to MongoDB: ${MONGODB_DB}`);
+    
+    // Automatically create database indexes
+    await initializeIndexes(db);
+    
     return db;
   })();
 
   return connectionPromise;
+}
+
+async function initializeIndexes(dbInstance) {
+  try {
+    await dbInstance.collection('bookings').createIndex({ date: 1, time: 1 });
+    await dbInstance.collection('sessions').createIndex({ token: 1 }, { unique: true });
+    await dbInstance.collection('sessions').createIndex({ createdAt: 1 }, { expireAfterSeconds: 604800 }); // Auto-expire after 7 days
+    await dbInstance.collection('admins').createIndex({ username: 1 }, { unique: true });
+    console.log("⚡ MongoDB indexes successfully verified/created.");
+  } catch (err) {
+    console.error("❌ Failed to initialize MongoDB indexes:", err);
+  }
 }
 
 /**

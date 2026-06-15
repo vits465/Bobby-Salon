@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://bobby-salon-ruddy.vercel.app/sitemap.xml
