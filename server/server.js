@@ -584,9 +584,35 @@ const sendWhatsAppAlert = async (bookingDetails) => {
     }
   }
 
+  // 4. Optional Green-API WhatsApp Alert (Free tier: 100 msgs/day)
+  const greenInstanceId = process.env.GREEN_API_INSTANCE_ID;
+  const greenToken = process.env.GREEN_API_TOKEN;
+  const greenPhone = process.env.ADMIN_PHONE;
+  if (greenInstanceId && greenToken && greenPhone) {
+    const cleanedPhone = greenPhone.replace(/\D/g, '');
+    const chatId = cleanedPhone.endsWith('@c.us') ? cleanedPhone : `${cleanedPhone}@c.us`;
+    try {
+      const res = await fetch(`https://api.green-api.com/waInstance${greenInstanceId}/sendMessage/${greenToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: chatId,
+          message: plainMsg
+        })
+      });
+      if (res.ok) {
+        console.log("✅ Free WhatsApp alert sent successfully to admin via Green-API!");
+      } else {
+        console.error("❌ Failed to send WhatsApp alert via Green-API:", res.statusText);
+      }
+    } catch (err) {
+      console.error("❌ Error sending Green-API request:", err);
+    }
+  }
+
   // Warn if no channels are configured
-  if (!discordWebhookUrl && !(tgToken && tgChatId) && !(apikey && phone)) {
-    console.log("⚠️ No admin alert credentials configured (Discord, Telegram, or CallMeBot). Skipping notifications.");
+  if (!discordWebhookUrl && !(tgToken && tgChatId) && !(apikey && phone) && !(greenInstanceId && greenToken && greenPhone)) {
+    console.log("⚠️ No admin alert credentials configured (Discord, Telegram, CallMeBot, or Green-API). Skipping notifications.");
   }
 };
 
