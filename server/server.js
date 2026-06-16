@@ -1278,7 +1278,7 @@ app.get('/api/admin/bookings', async (req, res) => {
 });
 
 // DELETE /api/admin/bookings/:id
-app.delete('/api/admin/bookings/:id', requireRole(['owner']), async (req, res) => {
+app.delete('/api/admin/bookings/:id', requireRole(['owner', 'staff']), async (req, res) => {
   try {
     const id = req.params.id;
     const bookings = getBookingsCollection();

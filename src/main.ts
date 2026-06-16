@@ -1238,7 +1238,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       data.bookedSlots.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime() || a.time.localeCompare(b.time));
       data.bookedSlots.forEach((b: any) => {
-        const deleteBtn = adminRole === 'owner' ? `<button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}">Delete</button>` : '';
+        const deleteBtn = `<button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}">Cancel</button>`;
         const waLink = `https://wa.me/${b.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${b.name}! This is Bobby Salon. Your booking for ${b.service} on ${b.date} at ${b.time} with ${b.barber} is confirmed. See you soon!`)}`;
         
         html += `
@@ -1284,7 +1284,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <tbody>
       `;
       data.queue.forEach((b: any) => {
-        const deleteBtn = adminRole === 'owner' ? `<button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}">Delete</button>` : '';
+        const deleteBtn = `<button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}">Cancel</button>`;
         html += `
           <tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)} ${escapeHtml(b.service.toLowerCase())} ${escapeHtml((b.barber || '').toLowerCase())}" data-date="${escapeHtml(b.date)}" data-barber="${escapeHtml(b.barber || 'Any Available')}" data-status="waitlist">
             <td class="admin-td">${escapeHtml(b.date)}</td>
@@ -1975,14 +1975,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const id = target.dataset.id;
         if (!id || !action) return;
         let url = ''; let method = 'POST';
-        if (action === 'delete') { if (!confirm('Delete this entry?')) return; url = `/api/admin/bookings/${id}`; method = 'DELETE'; }
+        if (action === 'delete') { if (!confirm('Cancel this appointment?')) return; url = `/api/admin/bookings/${id}`; method = 'DELETE'; }
         else if (action === 'complete') { url = `/api/admin/bookings/${id}/complete`; }
         else if (action === 'approve') { url = `/api/admin/queue/${id}/approve`; }
         target.textContent = '…'; target.style.opacity = '0.5';
         try {
           const res = await authFetch(url, { method });
           if (res.ok) {
-            showToast(action === 'delete' ? 'Booking deleted successfully!' : (action === 'complete' ? 'Booking marked as completed!' : 'Queue approved successfully!'), 'success');
+            showToast(action === 'delete' ? 'Booking cancelled successfully!' : (action === 'complete' ? 'Booking marked as completed!' : 'Queue approved successfully!'), 'success');
             fetchAdminData();
           } else {
             showToast('Action failed', 'error');
