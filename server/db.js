@@ -128,27 +128,55 @@ function createMockDB() {
     queue: [],
     galleryOrder: [],
     settings: [{
-      _id: 'default',
-      weekdayStart: '09:00',
-      weekdayEnd: '21:00',
-      saturdayStart: '09:00',
-      saturdayEnd: '21:00',
-      sundayStart: '10:00',
-      sundayEnd: '20:00',
-      blockedDates: []
+      _id: 'blocked_dates',
+      dates: []
     }],
     services: [
-      { _id: 's1', name: 'Haircut', gender: 'Male', duration: 30, price: 150, visible: true },
-      { _id: 's2', name: 'Beard Trim', gender: 'Male', duration: 15, price: 80, visible: true },
-      { _id: 's3', name: 'Hair Color', gender: 'Unisex', duration: 60, price: 500, visible: true }
-    ],
+      // Male
+      { name: "Haircut + Beard (40 Min)", gender: "Male", duration: 40, price: 110, active: true },
+      { name: "Only Haircut (25 Min)", gender: "Male", duration: 25, price: 65, active: true },
+      { name: "Only Beard (15 Min)", gender: "Male", duration: 15, price: 45, active: true },
+      { name: "Clean Shave (15 Min)", gender: "Male", duration: 15, price: 45, active: true },
+      { name: "Face Massage (30 Min)", gender: "Male", duration: 30, price: 50, active: true },
+      { name: "Face Cleanup (30 Min)", gender: "Male", duration: 30, price: 50, active: true },
+      { name: "Facial (1 Hour)", gender: "Male", duration: 60, price: 80, active: true },
+      { name: "Hydra Facial (1 Hour)", gender: "Male", duration: 60, price: 80, active: true },
+      { name: "Hair Color (45 Min)", gender: "Male", duration: 45, price: 70, active: true },
+      { name: "Haircut + Hair Color (1 Hour)", gender: "Male", duration: 60, price: 120, active: true },
+      // Female
+      { name: "Haircut (1 Hour)", gender: "Female", duration: 60, price: 65, active: true },
+      { name: "Hair Wash (30 Min)", gender: "Female", duration: 30, price: 30, active: true },
+      { name: "Hair Wash + Blow Dry (45 Min)", gender: "Female", duration: 45, price: 45, active: true },
+      { name: "Hair Color (1 Hour 20 Min)", gender: "Female", duration: 80, price: 70, active: true },
+      { name: "Hair Color Touch Up (1 Hour)", gender: "Female", duration: 60, price: 70, active: true },
+      { name: "Face Cleanup (30 Min)", gender: "Female", duration: 30, price: 50, active: true },
+      { name: "Facial (1 Hour)", gender: "Female", duration: 60, price: 80, active: true },
+      { name: "Hair Treatment (4 Hour)", gender: "Female", duration: 240, price: 80, active: true },
+      { name: "Hair Spa (1 Hour)", gender: "Female", duration: 60, price: 80, active: true }
+    ].map((s, idx) => ({ _id: `s${idx}`, ...s })),
     admins: [{
       username: 'admin',
-      passwordHash: 'c4ca4238a0b923820dcc509a6f75849b', // md5 hash of 1 or PBKDF2? Wait, the seedAdminsIfNeeded seeds pbkdf2!
+      passwordHash: 'c4ca4238a0b923820dcc509a6f75849b',
       salt: 'salt'
     }],
     sessions: []
   };
+
+  function matchQuery(item, query) {
+    if (!query || Object.keys(query).length === 0) return true;
+    return Object.entries(query).every(([k, v]) => {
+      const itemVal = item[k];
+      if (v && typeof v === 'object') {
+        if ('$ne' in v) {
+          return itemVal !== v.$ne;
+        }
+        if ('$in' in v) {
+          return Array.isArray(v.$in) && v.$in.includes(itemVal);
+        }
+      }
+      return itemVal === v;
+    });
+  }
 
   const createMockCollection = (name) => {
     if (!store[name]) store[name] = [];
@@ -156,17 +184,7 @@ function createMockDB() {
     
     return {
       find: (query = {}, options = {}) => {
-        let filtered = [...list];
-        if (query && Object.keys(query).length > 0) {
-          filtered = filtered.filter(item => {
-            return Object.entries(query).every(([k, v]) => {
-              if (v && typeof v === 'object' && v.$in) {
-                return v.$in.includes(item[k]);
-              }
-              return item[k] === v;
-            });
-          });
-        }
+        let filtered = list.filter(item => matchQuery(item, query));
         return {
           toArray: async () => filtered,
           sort: function() { return this; },
@@ -174,12 +192,7 @@ function createMockDB() {
         };
       },
       findOne: async (query = {}) => {
-        let filtered = [...list];
-        if (query && Object.keys(query).length > 0) {
-          filtered = filtered.filter(item => {
-            return Object.entries(query).every(([k, v]) => item[k] === v);
-          });
-        }
+        let filtered = list.filter(item => matchQuery(item, query));
         return filtered[0] || null;
       },
       insertOne: async (doc) => {
@@ -194,12 +207,7 @@ function createMockDB() {
         return { acknowledged: true };
       },
       updateOne: async (query, update) => {
-        let item = null;
-        if (query && Object.keys(query).length > 0) {
-          item = list.find(item => {
-            return Object.entries(query).every(([k, v]) => item[k] === v);
-          });
-        }
+        let item = list.find(item => matchQuery(item, query));
         if (item) {
           if (update.$set) {
             Object.assign(item, update.$set);
@@ -215,11 +223,7 @@ function createMockDB() {
       updateMany: async (query, update) => {
         let count = 0;
         list.forEach(item => {
-          let match = true;
-          if (query && Object.keys(query).length > 0) {
-            match = Object.entries(query).every(([k, v]) => item[k] === v);
-          }
-          if (match) {
+          if (matchQuery(item, query)) {
             if (update.$set) {
               Object.assign(item, update.$set);
             }
@@ -234,9 +238,7 @@ function createMockDB() {
         return { matchedCount: count, modifiedCount: count };
       },
       deleteOne: async (query) => {
-        const idx = list.findIndex(item => {
-          return Object.entries(query).every(([k, v]) => item[k] === v);
-        });
+        const idx = list.findIndex(item => matchQuery(item, query));
         if (idx !== -1) {
           list.splice(idx, 1);
           return { deletedCount: 1 };
@@ -247,8 +249,7 @@ function createMockDB() {
         let deletedCount = 0;
         for (let i = list.length - 1; i >= 0; i--) {
           const item = list[i];
-          const match = Object.entries(query).every(([k, v]) => item[k] === v);
-          if (match) {
+          if (matchQuery(item, query)) {
             list.splice(i, 1);
             deletedCount++;
           }
@@ -256,12 +257,7 @@ function createMockDB() {
         return { deletedCount };
       },
       countDocuments: async (query = {}) => {
-        let filtered = [...list];
-        if (query && Object.keys(query).length > 0) {
-          filtered = filtered.filter(item => {
-            return Object.entries(query).every(([k, v]) => item[k] === v);
-          });
-        }
+        let filtered = list.filter(item => matchQuery(item, query));
         return filtered.length;
       },
       createIndex: async () => {}
@@ -272,4 +268,3 @@ function createMockDB() {
     collection: (name) => createMockCollection(name)
   };
 }
-
