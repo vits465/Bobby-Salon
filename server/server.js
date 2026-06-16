@@ -504,36 +504,89 @@ function normalizeGalleryOrder(order) {
   });
 }
 
-// CallMeBot Free WhatsApp Alerts helper
+// Unified Free Admin Alerts helper (Telegram Bot, Discord Webhook, or CallMeBot WhatsApp)
 const sendWhatsAppAlert = async (bookingDetails) => {
-  const apikey = process.env.CALLMEBOT_API_KEY;
-  const phone = process.env.ADMIN_PHONE;
-  if (!apikey || !phone) {
-    console.log("⚠️ CallMeBot credentials missing in .env. Skipping free WhatsApp alert.");
-    return;
+  const statusText = bookingDetails.isQueue ? 'WAITLIST QUEUE REQUEST' : 'NEW APPOINTMENT';
+  const plainMsg = `*Bobby Salon - ${statusText}*\n\n` +
+                   `👤 Name: ${bookingDetails.name}\n` +
+                   `📞 Phone: ${bookingDetails.phone}\n` +
+                   `🚻 Gender: ${bookingDetails.gender}\n` +
+                   `💇 Service: ${bookingDetails.service}\n` +
+                   `💈 Barber: ${bookingDetails.barber}\n` +
+                   `📅 Date: ${bookingDetails.date}\n` +
+                   `⏰ Time: ${bookingDetails.time}`;
+
+  // 1. Optional Discord Webhook Alert (Forever Free & Easiest)
+  const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (discordWebhookUrl) {
+    try {
+      const res = await fetch(discordWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: plainMsg.replace(/\*/g, '**') }) // Convert to Discord bold style
+      });
+      if (res.ok) {
+        console.log("✅ Free Discord Webhook alert sent successfully to admin!");
+      } else {
+        console.error("❌ Failed to send Discord Webhook alert:", res.statusText);
+      }
+    } catch (err) {
+      console.error("❌ Error sending Discord Webhook request:", err);
+    }
   }
 
-  const statusText = bookingDetails.isQueue ? 'WAITLIST QUEUE REQUEST' : 'NEW APPOINTMENT';
-  const msg = `*Bobby Salon - ${statusText}*\n\n` +
-              `👤 Name: ${bookingDetails.name}\n` +
-              `📞 Phone: ${bookingDetails.phone}\n` +
-              `🚻 Gender: ${bookingDetails.gender}\n` +
-              `💇 Service: ${bookingDetails.service}\n` +
-              `💈 Barber: ${bookingDetails.barber}\n` +
-              `📅 Date: ${bookingDetails.date}\n` +
-              `⏰ Time: ${bookingDetails.time}`;
-
-  const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(msg)}&apikey=${encodeURIComponent(apikey)}`;
-  
-  try {
-    const res = await fetch(url);
-    if (res.ok) {
-      console.log("✅ Free WhatsApp alert sent successfully to admin!");
-    } else {
-      console.error("❌ Failed to send WhatsApp alert via CallMeBot:", res.statusText);
+  // 2. Optional Telegram Bot Alert (Forever Free & Reliable)
+  const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+  const tgChatId = process.env.TELEGRAM_CHAT_ID;
+  if (tgToken && tgChatId) {
+    const tgMsg = `<b>Bobby Salon - ${statusText}</b>\n\n` +
+                  `👤 Name: ${bookingDetails.name}\n` +
+                  `📞 Phone: ${bookingDetails.phone}\n` +
+                  `🚻 Gender: ${bookingDetails.gender}\n` +
+                  `💇 Service: ${bookingDetails.service}\n` +
+                  `💈 Barber: ${bookingDetails.barber}\n` +
+                  `📅 Date: ${bookingDetails.date}\n` +
+                  `⏰ Time: ${bookingDetails.time}`;
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: tgChatId,
+          text: tgMsg,
+          parse_mode: 'HTML'
+        })
+      });
+      if (res.ok) {
+        console.log("✅ Free Telegram alert sent successfully to admin!");
+      } else {
+        console.error("❌ Failed to send Telegram alert:", res.statusText);
+      }
+    } catch (err) {
+      console.error("❌ Error sending Telegram request:", err);
     }
-  } catch (err) {
-    console.error("❌ Error sending CallMeBot request:", err);
+  }
+
+  // 3. Original CallMeBot WhatsApp Alert
+  const apikey = process.env.CALLMEBOT_API_KEY;
+  const phone = process.env.ADMIN_PHONE;
+  if (apikey && phone) {
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(plainMsg)}&apikey=${encodeURIComponent(apikey)}`;
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        console.log("✅ Free WhatsApp alert sent successfully to admin via CallMeBot!");
+      } else {
+        console.error("❌ Failed to send WhatsApp alert via CallMeBot:", res.statusText);
+      }
+    } catch (err) {
+      console.error("❌ Error sending CallMeBot request:", err);
+    }
+  }
+
+  // Warn if no channels are configured
+  if (!discordWebhookUrl && !(tgToken && tgChatId) && !(apikey && phone)) {
+    console.log("⚠️ No admin alert credentials configured (Discord, Telegram, or CallMeBot). Skipping notifications.");
   }
 };
 
