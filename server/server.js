@@ -588,11 +588,12 @@ const sendWhatsAppAlert = async (bookingDetails) => {
   const greenInstanceId = process.env.GREEN_API_INSTANCE_ID;
   const greenToken = process.env.GREEN_API_TOKEN;
   const greenPhone = process.env.ADMIN_PHONE;
+  const greenUrl = process.env.GREEN_API_URL || 'https://api.greenapi.com';
   if (greenInstanceId && greenToken && greenPhone) {
     const cleanedPhone = greenPhone.replace(/\D/g, '');
     const chatId = cleanedPhone.endsWith('@c.us') ? cleanedPhone : `${cleanedPhone}@c.us`;
     try {
-      const res = await fetch(`https://api.green-api.com/waInstance${greenInstanceId}/sendMessage/${greenToken}`, {
+      const res = await fetch(`${greenUrl}/waInstance${greenInstanceId}/sendMessage/${greenToken}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
