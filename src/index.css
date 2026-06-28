@@ -7,11 +7,11 @@
 }
 
 :root {
-  --bg-color: oklch(88% 0.03 145); /* Soft sage green background */
-  --theme-main: oklch(33% 0.07 145); /* Dark forest green */
+  --bg-color: #e1efe3; /* Soft sage green background */
+  --theme-main: #334b33; /* Dark forest green */
   --theme-contrast: #ffffff; /* White card contrast */
-  --text-primary: oklch(33% 0.07 145); /* Dark green text */
-  --text-secondary: oklch(45% 0.05 145); /* Muted dark green */
+  --text-primary: #334b33; /* Dark green text */
+  --text-secondary: #516d51; /* Muted dark green */
   --accent: var(--theme-main);
   
   --font-serif: 'Kenao', 'Marcellus', 'Instrument Serif', serif; /* Custom Kenao display font with original fallbacks */
@@ -1779,7 +1779,7 @@ input:invalid:not(:placeholder-shown) ~ label {
 
 .service-gender-tag.female {
   background: rgba(180, 0, 100, 0.08);
-  color: oklch(50% 0.15 340);
+  color: #b40064;
 }
 
 .service-card-bottom {
