@@ -82,44 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(closeToast, 4000);
   };
 
-  // Custom Cursor Logic — GPU-optimized
-  const cursor = document.querySelector('.custom-cursor') as HTMLDivElement;
 
-  if (cursor) {
-    let cursorX = 0, cursorY = 0;
-    let rafId = 0;
-    let hasMoved = false;
-
-    const updateCursor = () => {
-      cursor.style.transform = `translate3d(${cursorX}px, ${cursorY}px, 0)`;
-      rafId = 0;
-    };
-
-    document.addEventListener('mousemove', (e) => {
-      cursorX = e.clientX;
-      cursorY = e.clientY;
-      if (!hasMoved) {
-        hasMoved = true;
-        cursor.classList.add('visible');
-      }
-      if (!rafId) rafId = requestAnimationFrame(updateCursor);
-    }, { passive: true });
-
-    // Use event delegation instead of attaching to every element
-    document.addEventListener('mouseover', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('.hover-target, a, button, input, select')) {
-        cursor.classList.add('hover');
-      }
-    }, { passive: true });
-
-    document.addEventListener('mouseout', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('.hover-target, a, button, input, select')) {
-        cursor.classList.remove('hover');
-      }
-    }, { passive: true });
-  }
 
   // Magnetic Button Logic
   const magneticElements = document.querySelectorAll('.magnetic');
@@ -245,14 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
       grid.appendChild(card);
     });
 
-    // Re-attach custom cursor hover
-    const cursor = document.querySelector('.custom-cursor');
-    if (cursor) {
-      grid.querySelectorAll('.hover-target').forEach(target => {
-        target.addEventListener('mouseenter', () => cursor.classList.add('hover'));
-        target.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
-      });
-    }
+
   };
 
   const fetchServices = async () => {
@@ -672,14 +628,7 @@ document.addEventListener('DOMContentLoaded', () => {
             submitBtn.disabled = false;
           });
           
-          // Re-attach custom cursor hover
-          const cursor = document.querySelector('.custom-cursor');
-          if (cursor) {
-            modal.querySelectorAll('.hover-target').forEach(target => {
-              target.addEventListener('mouseenter', () => cursor.classList.add('hover'));
-              target.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
-            });
-          }
+          // Global event delegation on document already handles cursor hover for all dynamic elements.
         }
 
 
@@ -954,14 +903,8 @@ document.addEventListener('DOMContentLoaded', () => {
       window.location.hash = '';
     });
 
-    // Re-attach custom cursor hover
-    const cursor = document.querySelector('.custom-cursor');
-    if (cursor) {
-      loginContainer.querySelectorAll('.hover-target').forEach(target => {
-        target.addEventListener('mouseenter', () => cursor.classList.add('hover'));
-        target.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
-      });
-    }
+    // Global event delegation on document already handles cursor hover for
+    // all .hover-target, a, button, input, select — no per-element re-attach needed.
   };
 
   const checkAdmin = async () => {
@@ -2798,13 +2741,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tableBody.appendChild(card);
       });
       
-      const cursor = document.querySelector('.custom-cursor');
-      if (cursor) {
-        tableBody.querySelectorAll('.hover-target').forEach(target => {
-          target.addEventListener('mouseenter', () => cursor.classList.add('hover'));
-          target.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
-        });
-      }
+      // Global event delegation on document already handles cursor hover for all dynamic elements.
     } catch {
       tableBody.innerHTML = '<div style="grid-column: 1/-1; padding: 3rem; text-align: center; color: red;">Error loading services.</div>';
     }
@@ -3035,13 +2972,7 @@ document.addEventListener('DOMContentLoaded', () => {
     deferredPrompt = e;
     setTimeout(() => {
       pwaBanner.style.display = 'flex';
-      const cursor = document.querySelector('.custom-cursor');
-      if (cursor) {
-        pwaBanner.querySelectorAll('.hover-target').forEach(target => {
-          target.addEventListener('mouseenter', () => cursor.classList.add('hover'));
-          target.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
-        });
-      }
+      // Global event delegation on document already handles cursor hover for all dynamic elements.
     }, 3000);
   });
 

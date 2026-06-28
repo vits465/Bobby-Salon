@@ -28,11 +28,7 @@
   box-sizing: border-box;
 }
 
-@media (hover: hover) {
-  * {
-    cursor: none !important; /* Hide default cursor */
-  }
-}
+
 
 html {
   scroll-behavior: smooth;
@@ -47,44 +43,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Custom Cursor — GPU-composited */
-.custom-cursor {
-  display: none;
-}
 
-@media (hover: hover) {
-  .custom-cursor {
-    display: block;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 12px;
-    height: 12px;
-    margin-left: -6px;
-    margin-top: -6px;
-    background-color: var(--accent);
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 9999;
-    will-change: transform;
-    opacity: 0;
-    transition: width 0.2s, height 0.2s, margin 0.2s, background-color 0.2s, opacity 0.2s;
-    contain: layout style;
-  }
-
-  .custom-cursor.visible {
-    opacity: 1;
-  }
-
-  .custom-cursor.hover {
-    width: 60px;
-    height: 60px;
-    margin-left: -30px;
-    margin-top: -30px;
-    background-color: var(--theme-main);
-    opacity: 0.15;
-  }
-}
 
 /* Ambient Glow */
 .ambient-glow {
