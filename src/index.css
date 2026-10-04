@@ -1011,6 +1011,72 @@ body.menu-open .sticky-header {
   color: var(--text-primary);
 }
 
+/* Booking Validation Styles & Micro-animations */
+.form-group {
+  scroll-margin-top: 100px;
+}
+
+.booking-form input.field-error, 
+.booking-form select.field-error {
+  border-bottom: 2px solid #E24B4A !important;
+  background: rgba(226, 75, 74, 0.04);
+}
+
+.booking-form input.field-error:focus, 
+.booking-form select.field-error:focus {
+  border-color: #E24B4A !important;
+  outline: none;
+}
+
+.form-group.has-error label {
+  color: #E24B4A !important;
+}
+
+.time-slot-grid.field-error {
+  outline: 2px solid #E24B4A;
+  outline-offset: 6px;
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(226, 75, 74, 0.25);
+}
+
+@keyframes fieldShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.form-group.shake-error {
+  animation: fieldShake 0.45s ease-in-out;
+}
+
+.booking-error {
+  color: #E24B4A;
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  animation: errorFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.booking-error svg {
+  flex-shrink: 0;
+}
+
+@keyframes errorFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .time-slot-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

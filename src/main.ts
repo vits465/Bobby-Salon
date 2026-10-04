@@ -109,9 +109,45 @@ document.addEventListener('DOMContentLoaded', () => {
   const queueInput = document.getElementById('b-queue') as HTMLInputElement;
   const submitBtn = document.getElementById('booking-submit-btn') as HTMLButtonElement;
 
+  const nameInput = document.getElementById('b-name') as HTMLInputElement;
+  const phoneInput = document.getElementById('b-phone') as HTMLInputElement;
   const genderInput = document.getElementById('b-gender') as HTMLSelectElement;
   const serviceInput = document.getElementById('b-service') as HTMLSelectElement;
   const barberInput = document.getElementById('b-barber') as HTMLSelectElement;
+
+  const clearFieldError = (elementOrId: string | HTMLElement) => {
+    let el: HTMLElement | null = null;
+    if (typeof elementOrId === 'string') {
+      if (elementOrId === 'b-time') {
+        el = document.getElementById('time-slot-grid');
+      } else {
+        el = document.getElementById(elementOrId);
+      }
+    } else {
+      el = elementOrId;
+    }
+    if (!el) return;
+
+    el.classList.remove('field-error');
+    if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) {
+      el.style.borderColor = '';
+    }
+
+    const group = el.closest('.form-group') as HTMLElement;
+    if (group) {
+      group.classList.remove('has-error', 'shake-error');
+      group.querySelectorAll('.booking-error').forEach(err => err.remove());
+    }
+
+    if (elementOrId === 'b-time' || el.id === 'time-slot-grid') {
+      const timeGroup = document.getElementById('b-time-group') || document.getElementById('time-slot-grid')?.closest('.form-group');
+      if (timeGroup) {
+        timeGroup.classList.remove('has-error', 'shake-error');
+        timeGroup.querySelectorAll('.booking-error').forEach(err => err.remove());
+      }
+      document.getElementById('time-slot-grid')?.classList.remove('field-error');
+    }
+  };
 
   let servicesList: any[] = [];
 
@@ -144,14 +180,47 @@ document.addEventListener('DOMContentLoaded', () => {
       barberInput.innerHTML = `
         <option value="Sumit" selected>Sumit (Specialist)</option>
       `;
+      clearFieldError('b-barber');
     }
   };
 
-  // Attach change listener
+  // Attach change and input listeners to clear errors in real time
   genderInput?.addEventListener('change', () => {
+    clearFieldError('b-gender');
     updateBookingServiceOptions();
     if (typeof (window as any).renderSlots === 'function') {
       (window as any).renderSlots();
+    }
+  });
+
+  serviceInput?.addEventListener('change', () => {
+    if (serviceInput.value) {
+      clearFieldError('b-service');
+    }
+  });
+
+  barberInput?.addEventListener('change', () => {
+    if (barberInput.value) {
+      clearFieldError('b-barber');
+    }
+  });
+
+  nameInput?.addEventListener('input', () => {
+    if (nameInput.value.trim().length >= 2) {
+      clearFieldError('b-name');
+    }
+  });
+
+  phoneInput?.addEventListener('input', () => {
+    const cleanPhone = phoneInput.value.trim().replace(/[\s\-\+\(\)]/g, '').replace(/^91/, '').replace(/^0/, '');
+    if (/^[6-9]\d{9}$/.test(cleanPhone)) {
+      clearFieldError('b-phone');
+    }
+  });
+
+  dateInput?.addEventListener('change', () => {
+    if (dateInput.value) {
+      clearFieldError('b-date');
     }
   });
 
@@ -198,6 +267,11 @@ document.addEventListener('DOMContentLoaded', () => {
             genderInput.value = s.gender;
             updateBookingServiceOptions();
             serviceInput.value = s.name;
+            clearFieldError('b-gender');
+            clearFieldError('b-service');
+            if (s.gender === 'Female') {
+              clearFieldError('b-barber');
+            }
             if (typeof (window as any).renderSlots === 'function') {
               (window as any).renderSlots();
             }
@@ -375,6 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
             timeInput.value = slot.time;
             queueInput.value = 'true';
             submitBtn.innerHTML = 'JOIN WAITLIST QUEUE &rarr;';
+            clearFieldError('b-time');
           } else {
             timeInput.value = '';
             queueInput.value = 'false';
@@ -385,6 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
           timeInput.value = slot.time;
           queueInput.value = 'false';
           submitBtn.innerHTML = 'BOOK VIA WHATSAPP &rarr;';
+          clearFieldError('b-time');
         }
 
         // Auto-scroll to the submit button to save scrolling on mobile/laptops
@@ -445,78 +521,268 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchSlots(dateInput.value);
   }
 
+  interface FormError {
+    id: string;
+    friendlyName: string;
+    element: HTMLElement;
+    focusElement?: HTMLElement;
+    scrollTarget: HTMLElement;
+    errorMessage: string;
+    toastMessage?: string;
+  }
+
   function validateBookingForm(): boolean {
-    const fields = {
-      name: document.getElementById('b-name') as HTMLInputElement,
-      phone: document.getElementById('b-phone') as HTMLInputElement,
-      gender: document.getElementById('b-gender') as HTMLSelectElement,
-      service: document.getElementById('b-service') as HTMLSelectElement,
-      barber: document.getElementById('b-barber') as HTMLSelectElement,
-      date: document.getElementById('b-date') as HTMLInputElement,
-      time: document.getElementById('b-time') as HTMLInputElement,
-    };
+    const bName = document.getElementById('b-name') as HTMLInputElement | null;
+    const bPhone = document.getElementById('b-phone') as HTMLInputElement | null;
+    const bGender = document.getElementById('b-gender') as HTMLSelectElement | null;
+    const bService = document.getElementById('b-service') as HTMLSelectElement | null;
+    const bBarber = document.getElementById('b-barber') as HTMLSelectElement | null;
+    const bDate = document.getElementById('b-date') as HTMLInputElement | null;
+    const bTime = document.getElementById('b-time') as HTMLInputElement | null;
+    const timeGrid = document.getElementById('time-slot-grid') as HTMLElement | null;
+    const timeGroup = document.getElementById('b-time-group') || (timeGrid?.closest('.form-group') as HTMLElement | null);
 
-    let isValid = true;
-
-    // Remove old error messages
+    // Remove old error messages and error states
     document.querySelectorAll('.booking-error').forEach(el => el.remove());
-    
-    // Reset border colors
-    Object.values(fields).forEach(field => {
-      if (field) field.style.borderColor = '';
+    document.querySelectorAll('.form-group').forEach(el => el.classList.remove('has-error', 'shake-error'));
+    document.querySelectorAll('.field-error').forEach(el => {
+      el.classList.remove('field-error');
+      if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) {
+        el.style.borderColor = '';
+      }
     });
 
-    Object.entries(fields).forEach(([key, field]) => {
-      if (!field) return;
-      const value = field.value.trim();
-      
-      if (!value || value === '' || value === 'Select' || value === '--') {
-        isValid = false;
-        const error = document.createElement('span');
-        error.className = 'booking-error';
-        error.style.cssText = 'color: #E24B4A; font-size: 12px; display: block; margin-top: 4px; font-family: var(--font-mono);';
-        
-        if (key === 'time') {
-          error.textContent = 'Please select a time slot from the grid';
-          const grid = document.getElementById('time-slot-grid');
-          grid?.parentNode?.appendChild(error);
-        } else {
-          error.textContent = `Please fill in your ${key}`;
-          field.parentNode?.appendChild(error);
-          field.style.borderColor = '#E24B4A';
+    const errors: FormError[] = [];
+
+    // 1. Full Name
+    if (bName) {
+      const nameVal = bName.value.trim();
+      const group = (bName.closest('.form-group') as HTMLElement) || bName;
+      if (!nameVal) {
+        errors.push({
+          id: 'b-name',
+          friendlyName: 'Full Name',
+          element: bName,
+          focusElement: bName,
+          scrollTarget: group,
+          errorMessage: 'Please enter your full name',
+          toastMessage: 'Please enter your Full Name to continue.'
+        });
+      } else if (nameVal.length < 2) {
+        errors.push({
+          id: 'b-name',
+          friendlyName: 'Full Name',
+          element: bName,
+          focusElement: bName,
+          scrollTarget: group,
+          errorMessage: 'Full name must be at least 2 characters',
+          toastMessage: 'Please enter a valid Full Name (at least 2 letters).'
+        });
+      }
+    }
+
+    // 2. Phone Number
+    if (bPhone) {
+      const rawPhone = bPhone.value.trim();
+      const group = (bPhone.closest('.form-group') as HTMLElement) || bPhone;
+      if (!rawPhone) {
+        errors.push({
+          id: 'b-phone',
+          friendlyName: 'Phone Number',
+          element: bPhone,
+          focusElement: bPhone,
+          scrollTarget: group,
+          errorMessage: 'Please enter your phone number',
+          toastMessage: 'Please enter your Phone Number to continue.'
+        });
+      } else {
+        const cleanPhone = rawPhone.replace(/[\s\-\+\(\)]/g, '').replace(/^91/, '').replace(/^0/, '');
+        if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+          errors.push({
+            id: 'b-phone',
+            friendlyName: 'Phone Number',
+            element: bPhone,
+            focusElement: bPhone,
+            scrollTarget: group,
+            errorMessage: 'Please enter a valid 10-digit Indian mobile number',
+            toastMessage: 'Please enter a valid 10-digit Indian phone number.'
+          });
         }
       }
-    });
+    }
 
-    // Phone number validation (Indian mobile: 10 digits starting with 6-9)
-    if (fields.phone && fields.phone.value) {
-      const phoneVal = fields.phone.value.replace(/\s/g, '');
-      if (!/^[6-9]\d{9}$/.test(phoneVal)) {
-        isValid = false;
-        fields.phone.style.borderColor = '#E24B4A';
-        const error = document.createElement('span');
-        error.className = 'booking-error';
-        error.style.cssText = 'color: #E24B4A; font-size: 12px; display: block; margin-top: 4px; font-family: var(--font-mono);';
-        error.textContent = 'Enter a valid 10-digit Indian mobile number';
-        fields.phone.parentNode?.appendChild(error);
+    // 3. Gender
+    const genderVal = bGender?.value.trim() || '';
+    if (bGender) {
+      const group = (bGender.closest('.form-group') as HTMLElement) || bGender;
+      if (!genderVal || genderVal === 'Select Gender') {
+        errors.push({
+          id: 'b-gender',
+          friendlyName: 'Gender',
+          element: bGender,
+          focusElement: bGender,
+          scrollTarget: group,
+          errorMessage: 'Please select gender',
+          toastMessage: 'Please select your Gender to continue.'
+        });
       }
     }
 
-    // Past date validation
-    if (fields.date && fields.date.value) {
+    // 4. Service
+    if (bService) {
+      const group = (bService.closest('.form-group') as HTMLElement) || bService;
+      const serviceVal = bService.value.trim();
+      if (!genderVal || genderVal === 'Select Gender') {
+        errors.push({
+          id: 'b-service',
+          friendlyName: 'Service',
+          element: bService,
+          focusElement: bGender || bService,
+          scrollTarget: (bGender?.closest('.form-group') as HTMLElement) || group,
+          errorMessage: 'Please select gender first to view services',
+          toastMessage: 'Please select Gender first, then choose your Service.'
+        });
+      } else if (!serviceVal || serviceVal === 'Select Service' || bService.disabled) {
+        errors.push({
+          id: 'b-service',
+          friendlyName: 'Service',
+          element: bService,
+          focusElement: bService,
+          scrollTarget: group,
+          errorMessage: 'Please select a service',
+          toastMessage: 'Please select a Service to continue.'
+        });
+      }
+    }
+
+    // 5. Preferred Barber
+    if (bBarber) {
+      const barberVal = bBarber.value.trim();
+      const group = (bBarber.closest('.form-group') as HTMLElement) || bBarber;
+      if (!barberVal || barberVal === 'Preferred Barber') {
+        errors.push({
+          id: 'b-barber',
+          friendlyName: 'Preferred Barber',
+          element: bBarber,
+          focusElement: bBarber,
+          scrollTarget: group,
+          errorMessage: 'Please select your preferred barber',
+          toastMessage: 'Please select your Preferred Barber to continue.'
+        });
+      }
+    }
+
+    // 6. Preferred Date
+    if (bDate) {
+      const dateVal = bDate.value.trim();
+      const group = (bDate.closest('.form-group') as HTMLElement) || bDate;
       const today = getIndiaDateString();
-      if (fields.date.value < today) {
-        isValid = false;
-        fields.date.style.borderColor = '#E24B4A';
-        const error = document.createElement('span');
-        error.className = 'booking-error';
-        error.style.cssText = 'color: #E24B4A; font-size: 12px; display: block; margin-top: 4px; font-family: var(--font-mono);';
-        error.textContent = 'Cannot book an appointment in the past';
-        fields.date.parentNode?.appendChild(error);
+      if (!dateVal) {
+        errors.push({
+          id: 'b-date',
+          friendlyName: 'Preferred Date',
+          element: bDate,
+          focusElement: bDate,
+          scrollTarget: group,
+          errorMessage: 'Please select an appointment date',
+          toastMessage: 'Please select an appointment Date to continue.'
+        });
+      } else if (dateVal < today) {
+        errors.push({
+          id: 'b-date',
+          friendlyName: 'Preferred Date',
+          element: bDate,
+          focusElement: bDate,
+          scrollTarget: group,
+          errorMessage: 'Cannot book an appointment in the past',
+          toastMessage: 'Cannot book an appointment in the past. Please select today or a future date.'
+        });
       }
     }
 
-    return isValid;
+    // 7. Time Slot
+    const timeVal = bTime?.value.trim() || '';
+    if (!timeVal) {
+      const targetGroup = timeGroup || (timeGrid?.closest('.form-group') as HTMLElement) || (bookingForm as HTMLElement);
+      errors.push({
+        id: 'b-time',
+        friendlyName: 'Time Slot',
+        element: timeGrid || (bTime as HTMLElement),
+        scrollTarget: targetGroup,
+        errorMessage: 'Please select an available time slot from the grid above',
+        toastMessage: 'Please select an available Time Slot from the grid.'
+      });
+    }
+
+    if (errors.length > 0) {
+      // Mark error UI on all invalid fields
+      errors.forEach(err => {
+        err.element.classList.add('field-error');
+        const group = (err.element.closest('.form-group') as HTMLElement) || err.scrollTarget;
+        if (group) {
+          group.classList.add('has-error');
+          group.classList.add('shake-error');
+          setTimeout(() => {
+            group.classList.remove('shake-error');
+          }, 600);
+
+          // Append inline error message
+          const errorSpan = document.createElement('span');
+          errorSpan.className = 'booking-error';
+          errorSpan.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span>${escapeHtml(err.errorMessage)}</span>
+          `;
+          group.appendChild(errorSpan);
+        }
+      });
+
+      // The first error in order of the form fields
+      const firstError = errors[0];
+
+      // Formulate user notification toast
+      let toastMsg = '';
+      if (errors.length === 1) {
+        toastMsg = firstError.toastMessage || `Please fill in: ${firstError.friendlyName}`;
+      } else {
+        const uniqueNames = Array.from(new Set(errors.map(e => e.friendlyName)));
+        if (uniqueNames.length === 2) {
+          toastMsg = `Please fill in required fields: ${uniqueNames[0]} and ${uniqueNames[1]}`;
+        } else {
+          toastMsg = `Please complete required fields: ${uniqueNames.slice(0, 2).join(', ')} and more`;
+        }
+      }
+
+      showToast(toastMsg, 'error');
+
+      // Scroll smoothly to the first forgotten field (centered in viewport)
+      const targetToScroll = firstError.scrollTarget || firstError.element;
+      if (targetToScroll) {
+        targetToScroll.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center'
+        });
+      }
+
+      // Automatically focus the first forgotten input or select
+      if (firstError.focusElement && typeof firstError.focusElement.focus === 'function') {
+        setTimeout(() => {
+          try {
+            firstError.focusElement?.focus({ preventScroll: true });
+          } catch {
+            // ignore non-focusable
+          }
+        }, 300);
+      }
+
+      return false;
+    }
+
+    return true;
   }
 
   if (bookingForm) {
