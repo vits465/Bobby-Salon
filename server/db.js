@@ -127,10 +127,18 @@ function createMockDB() {
     completedBookings: [],
     queue: [],
     galleryOrder: [],
-    settings: [{
-      _id: 'blocked_dates',
-      dates: []
-    }],
+    settings: [
+      {
+        _id: 'blocked_dates',
+        dates: []
+      },
+      {
+        _id: 'timings',
+        weekday: { start: 9, end: 20 },
+        saturday: { start: 14, end: 20 },
+        sunday: { start: 9, end: 21 }
+      }
+    ],
     services: [
       // Male
       { name: "Haircut + Beard (40 Min)", gender: "Male", duration: 40, price: 110, active: true },
@@ -154,27 +162,27 @@ function createMockDB() {
       { name: "Hair Treatment (4 Hour)", gender: "Female", duration: 240, price: 80, active: true },
       { name: "Hair Spa (1 Hour)", gender: "Female", duration: 60, price: 80, active: true }
     ].map((s, idx) => ({ _id: `s${idx}`, ...s })),
-    admins: [{
-      username: 'admin',
-      passwordHash: 'c4ca4238a0b923820dcc509a6f75849b',
-      salt: 'salt'
-    }],
+    admins: [],
     sessions: []
   };
 
   function matchQuery(item, query) {
     if (!query || Object.keys(query).length === 0) return true;
+    if (Array.isArray(query.$or)) {
+      return query.$or.some(subQuery => matchQuery(item, subQuery));
+    }
     return Object.entries(query).every(([k, v]) => {
+      if (k === '$or') return true;
       const itemVal = item[k];
-      if (v && typeof v === 'object') {
+      if (v && typeof v === 'object' && v !== null) {
         if ('$ne' in v) {
-          return itemVal !== v.$ne;
+          return itemVal !== v.$ne && String(itemVal) !== String(v.$ne);
         }
         if ('$in' in v) {
-          return Array.isArray(v.$in) && v.$in.includes(itemVal);
+          return Array.isArray(v.$in) && (v.$in.includes(itemVal) || v.$in.some(x => String(x) === String(itemVal)));
         }
       }
-      return itemVal === v;
+      return itemVal === v || (itemVal != null && v != null && String(itemVal) === String(v));
     });
   }
 
@@ -206,8 +214,20 @@ function createMockDB() {
         });
         return { acknowledged: true };
       },
-      updateOne: async (query, update) => {
+      findOneAndDelete: async (query = {}) => {
+        const idx = list.findIndex(item => matchQuery(item, query));
+        if (idx !== -1) {
+          const [deleted] = list.splice(idx, 1);
+          return deleted;
+        }
+        return null;
+      },
+      updateOne: async (query, update, options = {}) => {
         let item = list.find(item => matchQuery(item, query));
+        if (!item && options && options.upsert) {
+          item = { _id: (query && query._id) || Math.random().toString(36).substring(2, 9), ...query };
+          list.push(item);
+        }
         if (item) {
           if (update.$set) {
             Object.assign(item, update.$set);
@@ -217,10 +237,23 @@ function createMockDB() {
               item[k] = (item[k] || 0) + v;
             });
           }
+          if (update.$addToSet) {
+            Object.entries(update.$addToSet).forEach(([k, v]) => {
+              if (!Array.isArray(item[k])) item[k] = [];
+              if (!item[k].includes(v)) item[k].push(v);
+            });
+          }
+          if (update.$pull) {
+            Object.entries(update.$pull).forEach(([k, v]) => {
+              if (Array.isArray(item[k])) {
+                item[k] = item[k].filter(elem => elem !== v);
+              }
+            });
+          }
         }
         return { matchedCount: item ? 1 : 0, modifiedCount: item ? 1 : 0 };
       },
-      updateMany: async (query, update) => {
+      updateMany: async (query, update, options = {}) => {
         let count = 0;
         list.forEach(item => {
           if (matchQuery(item, query)) {
@@ -230,6 +263,19 @@ function createMockDB() {
             if (update.$inc) {
               Object.entries(update.$inc).forEach(([k, v]) => {
                 item[k] = (item[k] || 0) + v;
+              });
+            }
+            if (update.$addToSet) {
+              Object.entries(update.$addToSet).forEach(([k, v]) => {
+                if (!Array.isArray(item[k])) item[k] = [];
+                if (!item[k].includes(v)) item[k].push(v);
+              });
+            }
+            if (update.$pull) {
+              Object.entries(update.$pull).forEach(([k, v]) => {
+                if (Array.isArray(item[k])) {
+                  item[k] = item[k].filter(elem => elem !== v);
+                }
               });
             }
             count++;

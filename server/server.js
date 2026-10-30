@@ -95,7 +95,6 @@ function generateSalt() {
 async function seedAdminsIfNeeded() {
   try {
     const adminsCol = getAdminsCollection();
-    const count = await adminsCol.countDocuments();
     const defaultPassword = process.env.ADMIN_PASSWORD || 'bobby123';
     
     const usernames = [
@@ -105,27 +104,29 @@ async function seedAdminsIfNeeded() {
       { name: 'receptionist', role: 'staff' }
     ];
 
-    if (count === 0) {
-      const adminDocs = usernames.map(u => {
+    for (const u of usernames) {
+      const existing = await adminsCol.findOne({ username: u.name.toLowerCase() });
+      if (!existing) {
         const salt = generateSalt();
         const passwordHash = hashPassword(defaultPassword, salt);
-        return {
+        await adminsCol.insertOne({
           username: u.name.toLowerCase(),
           role: u.role,
           salt,
           passwordHash,
           createdAt: new Date()
-        };
-      });
-      await adminsCol.insertMany(adminDocs);
-      console.log("🌱 Default admins seeded successfully in database!");
-    } else {
-      // Ensure existing seeded admins have roles
-      for (const u of usernames) {
-        await adminsCol.updateOne(
-          { username: u.name.toLowerCase(), role: { $exists: false } },
-          { $set: { role: u.role } }
-        );
+        });
+      } else {
+        const updates = {};
+        if (!existing.role) updates.role = u.role;
+        if (!existing.passwordHash || !existing.salt) {
+          const salt = generateSalt();
+          updates.salt = salt;
+          updates.passwordHash = hashPassword(defaultPassword, salt);
+        }
+        if (Object.keys(updates).length > 0) {
+          await adminsCol.updateOne({ username: u.name.toLowerCase() }, { $set: updates });
+        }
       }
     }
   } catch (err) {
@@ -212,12 +213,20 @@ app.use('/api', async (req, res, next) => {
   }
 });
 
-// Global API Rate Limiting (100 requests per 15 minutes per IP)
+// Global API Rate Limiting (1000 requests per 15 minutes, with local bypass)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiter for local development and admin users to prevent accidental lockouts
+    const ip = req.ip || req.connection?.remoteAddress || '';
+    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || process.env.NODE_ENV !== 'production') {
+      return true;
+    }
+    return false;
+  },
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', apiLimiter);
@@ -462,6 +471,21 @@ function validateObjectId(id) {
   return ObjectId.isValid(id) ? new ObjectId(id) : null;
 }
 
+function buildServiceQuery(rawId) {
+  if (!rawId || typeof rawId !== 'string') return null;
+  const trimmed = rawId.trim();
+  if (!trimmed) return null;
+  if (/^[0-9a-fA-F]{24}$/.test(trimmed)) {
+    try {
+      const objId = new ObjectId(trimmed);
+      return { $or: [{ _id: objId }, { _id: trimmed }] };
+    } catch {
+      return { _id: trimmed };
+    }
+  }
+  return { _id: trimmed };
+}
+
 function httpError(status, message) {
   const error = new Error(message);
   error.status = status;
@@ -475,7 +499,7 @@ function normalizeServicePayload(body) {
   const price = Number.parseFloat(body.price);
 
   if (name.length < 2 || name.length > 120) return null;
-  if (!['Male', 'Female'].includes(gender)) return null;
+  if (!['Male', 'Female', 'Unisex'].includes(gender)) return null;
   if (!Number.isInteger(duration) || duration < 5 || duration > 480) return null;
   if (!Number.isFinite(price) || price < 0 || price > 100000) return null;
 
@@ -1177,15 +1201,15 @@ app.post('/api/admin/services', requireRole(['owner']), async (req, res) => {
 // PUT /api/admin/services/:id
 app.put('/api/admin/services/:id', requireRole(['owner']), async (req, res) => {
   try {
-    const id = validateObjectId(req.params.id);
+    const query = buildServiceQuery(req.params.id);
     const servicePayload = normalizeServicePayload(req.body);
-    if (!id) return res.status(400).json({ error: 'Invalid service id' });
+    if (!query) return res.status(400).json({ error: 'Invalid service id' });
     if (!servicePayload) {
       return res.status(400).json({ error: 'Invalid service fields' });
     }
     const servicesCol = getServicesCollection();
     await servicesCol.updateOne(
-      { _id: id },
+      query,
       { $set: servicePayload }
     );
     res.json({ success: true });
@@ -1198,12 +1222,12 @@ app.put('/api/admin/services/:id', requireRole(['owner']), async (req, res) => {
 // PATCH /api/admin/services/:id/visibility  — toggle show/hide
 app.patch('/api/admin/services/:id/visibility', requireRole(['owner']), async (req, res) => {
   try {
-    const id = validateObjectId(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid service id' });
+    const query = buildServiceQuery(req.params.id);
+    if (!query) return res.status(400).json({ error: 'Invalid service id' });
     const { visible } = req.body;
     if (typeof visible !== 'boolean') return res.status(400).json({ error: 'visible must be boolean' });
     const servicesCol = getServicesCollection();
-    await servicesCol.updateOne({ _id: id }, { $set: { visible } });
+    await servicesCol.updateOne(query, { $set: { visible } });
     res.json({ success: true, visible });
   } catch (err) {
     console.error('Error updating visibility:', err);
@@ -1214,12 +1238,12 @@ app.patch('/api/admin/services/:id/visibility', requireRole(['owner']), async (r
 // DELETE /api/admin/services/:id
 app.delete('/api/admin/services/:id', requireRole(['owner']), async (req, res) => {
   try {
-    const id = validateObjectId(req.params.id);
-    if (!id) return res.status(400).json({ error: 'Invalid service id' });
+    const query = buildServiceQuery(req.params.id);
+    if (!query) return res.status(400).json({ error: 'Invalid service id' });
     const servicesCol = getServicesCollection();
     // Soft delete — keeps record but removes from all views
     await servicesCol.updateOne(
-      { _id: id },
+      query,
       { $set: { active: false } }
     );
     res.json({ success: true });

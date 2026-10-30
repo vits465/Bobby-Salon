@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     serviceInput.disabled = false;
 
     // Filter services from database by gender
-    const filtered = servicesList.filter(s => s.gender === gender);
+    const filtered = servicesList.filter(s => s.gender === gender || s.gender === 'Unisex');
     filtered.forEach(s => {
       const option = document.createElement('option');
       option.value = s.name;
@@ -233,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchQuery = (document.getElementById('catalog-search') as HTMLInputElement)?.value.toLowerCase() || '';
 
     const filtered = servicesList.filter(s => {
-      const matchesTab = activeTab === 'all' || s.gender === activeTab;
+      const matchesTab = activeTab === 'all' || s.gender === activeTab || s.gender === 'Unisex';
       const matchesSearch = s.name.toLowerCase().includes(searchQuery);
       return matchesTab && matchesSearch;
     });
@@ -1286,15 +1286,26 @@ document.addEventListener('DOMContentLoaded', () => {
   async function fetchAdminData() {
     try {
       const res = await authFetch('/api/admin/bookings');
+      if (!res.ok) {
+        if (res.status === 401) {
+          sessionStorage.removeItem('adminPassword');
+          checkAdmin();
+        }
+        return;
+      }
       const data = await res.json();
+      if (!data || !Array.isArray(data.bookedSlots)) return;
       adminRole = data.role || 'staff';
       sessionStorage.setItem('adminRole', adminRole);
       
       const todayStr = getIndiaDateString();
-      const totalToday = data.bookedSlots.filter((b: any) => b.date === todayStr).length;
-      const totalWaitlist = data.queue.length;
-      const totalCompleted = data.completedSlots.length;
-      const estimatedRevenue = data.completedSlots.reduce((sum: number, b: any) => sum + getServicePrice(b.service), 0);
+      const bookedSlots = data.bookedSlots || [];
+      const completedSlots = data.completedSlots || [];
+      const queueSlots = data.queue || [];
+      const totalToday = bookedSlots.filter((b: any) => b.date === todayStr).length;
+      const totalWaitlist = queueSlots.length;
+      const totalCompleted = completedSlots.length;
+      const estimatedRevenue = completedSlots.reduce((sum: number, b: any) => sum + getServicePrice(b.service), 0);
 
       // Preserve filter values before re-rendering
       const searchInputOld = document.getElementById('admin-search') as HTMLInputElement;
@@ -1311,26 +1322,26 @@ document.addEventListener('DOMContentLoaded', () => {
       const currentStatusFilter = statusFilterOld ? statusFilterOld.value : 'all';
 
       let html = `
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
-          <div class="admin-glass-panel" style="text-align: center; padding: 2rem;">
-            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase; margin-bottom: 0.5rem;">Today's Bookings</h3>
-            <p style="color: var(--theme-main); font-family: var(--font-serif); font-size: 4rem; line-height: 1; margin: 0;">${totalToday}</p>
+        <div class="admin-stats-grid">
+          <div class="admin-glass-panel admin-stat-card">
+            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Today's Bookings</h3>
+            <p class="admin-stat-value" style="color: var(--theme-main);">${totalToday}</p>
           </div>
-          <div class="admin-glass-panel" style="text-align: center; padding: 2rem;">
-            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase; margin-bottom: 0.5rem;">Waitlist Queue</h3>
-            <p style="color: #4682B4; font-family: var(--font-serif); font-size: 4rem; line-height: 1; margin: 0;">${totalWaitlist}</p>
+          <div class="admin-glass-panel admin-stat-card">
+            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Waitlist Queue</h3>
+            <p class="admin-stat-value" style="color: #4682B4;">${totalWaitlist}</p>
           </div>
-          <div class="admin-glass-panel" style="text-align: center; padding: 2rem;">
-            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase; margin-bottom: 0.5rem;">Total Completed</h3>
-            <p style="color: #2E8B57; font-family: var(--font-serif); font-size: 4rem; line-height: 1; margin: 0;">${totalCompleted}</p>
+          <div class="admin-glass-panel admin-stat-card">
+            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Total Completed</h3>
+            <p class="admin-stat-value" style="color: #2E8B57;">${totalCompleted}</p>
           </div>
-          <div class="admin-glass-panel" style="text-align: center; padding: 2rem;">
-            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.9rem; text-transform: uppercase; margin-bottom: 0.5rem;">Estimated Earnings</h3>
-            <p style="color: #FF8C00; font-family: var(--font-serif); font-size: 4rem; line-height: 1; margin: 0;">INR ${estimatedRevenue}</p>
+          <div class="admin-glass-panel admin-stat-card">
+            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Estimated Earnings</h3>
+            <p class="admin-stat-value" style="color: #FF8C00;">INR ${estimatedRevenue}</p>
           </div>
         </div>
 
-        <div style="margin-bottom: 3rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+        <div class="admin-actions-toolbar">
           <button id="toggle-manual-booking-btn" class="admin-btn admin-btn-primary hover-target">+ Add Manual Booking</button>
           <button id="export-bookings-csv-btn" class="admin-btn admin-btn-secondary hover-target">Export CSV</button>
           
@@ -1388,7 +1399,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <option value="" disabled selected>Select Date First</option>
                   </select>
                 </div>
-                <div style="display:flex; gap:1rem; justify-content: flex-end; margin-top: 2rem;">
+                <div class="admin-modal-actions">
                   <button type="button" id="mb-cancel-btn" class="admin-btn admin-btn-secondary hover-target">Cancel</button>
                   <button type="submit" class="admin-btn admin-btn-primary hover-target">Book Slot</button>
                 </div>
@@ -1692,6 +1703,9 @@ document.addEventListener('DOMContentLoaded', () => {
           };
           cancelBtn?.addEventListener('click', hideModal);
           closeBtn?.addEventListener('click', hideModal);
+          formWrap.addEventListener('click', (e) => {
+            if (e.target === formWrap) hideModal();
+          });
         }
 
         // Gender changes in manual booking
@@ -1702,7 +1716,7 @@ document.addEventListener('DOMContentLoaded', () => {
           mbGender.addEventListener('change', () => {
             const gender = mbGender.value;
             mbService.innerHTML = '<option value="" disabled selected>Select Service</option>';
-            const filtered = servicesList.filter((s: any) => s.gender === gender);
+            const filtered = servicesList.filter((s: any) => s.gender === gender || s.gender === 'Unisex');
             filtered.forEach((s: any) => {
               const opt = document.createElement('option');
               opt.value = s.name; opt.textContent = s.name;
@@ -1817,13 +1831,13 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="admin-dashboard-layout">
           <!-- Sidebar Nav -->
           <aside class="admin-sidebar">
-            <div>
-              <div style="margin-bottom: 2rem;">
-                <h1 style="color: var(--theme-main); font-family: var(--font-serif); font-size: 2.2rem; margin: 0; letter-spacing: 0.05em; text-transform: uppercase;">Bobby Salon</h1>
+            <div class="admin-sidebar-top">
+              <div class="admin-brand-header">
+                <h1 style="color: var(--theme-main); font-family: var(--font-serif); margin: 0; letter-spacing: 0.05em; text-transform: uppercase;">Bobby Salon</h1>
                 <p style="font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; color: var(--text-secondary); text-transform: uppercase; margin-top: 0.2rem;">Management Workspace</p>
               </div>
               
-              <nav>
+              <nav class="admin-nav-container">
                 <ul class="admin-nav-list">
                   <li>
                     <button id="tab-bookings" class="admin-nav-item active hover-target" onclick="window._adminTab('bookings')">
@@ -1859,14 +1873,14 @@ document.addEventListener('DOMContentLoaded', () => {
               </nav>
             </div>
             
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-              <button id="admin-logout-btn" class="admin-btn admin-btn-danger hover-target" style="width: 100%;">
-                <svg viewBox="0 0 24 24" style="stroke: currentColor; width: 16px; height: 16px; fill: none; stroke-width: 2;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                Logout
+            <div class="admin-sidebar-footer">
+              <button id="admin-logout-btn" class="admin-btn admin-btn-danger hover-target">
+                <svg viewBox="0 0 24 24" style="stroke: currentColor; width: 14px; height: 14px; fill: none; stroke-width: 2;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                <span>Logout</span>
               </button>
               <a href="/" class="admin-btn admin-btn-secondary hover-target" style="text-decoration: none;" onclick="window.location.reload()">
-                <svg viewBox="0 0 24 24" style="stroke: currentColor; width: 16px; height: 16px; fill: none; stroke-width: 2;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                Back to Site
+                <svg viewBox="0 0 24 24" style="stroke: currentColor; width: 14px; height: 14px; fill: none; stroke-width: 2;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <span>Site</span>
               </a>
             </div>
           </aside>
@@ -1930,7 +1944,7 @@ document.addEventListener('DOMContentLoaded', () => {
                       </div>
                     </div>
                     
-                    <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                    <div class="admin-modal-actions">
                       <button type="button" id="admin-service-form-cancel-btn" class="admin-btn admin-btn-secondary hover-target">Cancel</button>
                       <button type="submit" class="admin-btn admin-btn-primary hover-target">Save Service</button>
                     </div>
@@ -1990,33 +2004,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 <h2 style="font-family: var(--font-serif); font-size: 2rem; color: var(--theme-main); margin-bottom: 1.5rem;">Salon Timing Settings</h2>
                 <form id="admin-settings-form" style="max-width: 600px;">
                   <!-- Weekday -->
-                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 1rem;">
-                    <span style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: bold; width: 120px;">Weekdays:</span>
-                    <div style="display:flex; gap: 0.5rem; align-items:center;">
-                      <select id="settings-wd-start" class="admin-select" style="padding: 0.5rem 2rem 0.5rem 0.5rem; font-size: 0.85rem;"></select>
+                  <div class="admin-timing-row">
+                    <span class="admin-timing-label">Weekdays:</span>
+                    <div class="admin-timing-selects">
+                      <select id="settings-wd-start" class="admin-select"></select>
                       <span>to</span>
-                      <select id="settings-wd-end" class="admin-select" style="padding: 0.5rem 2rem 0.5rem 0.5rem; font-size: 0.85rem;"></select>
+                      <select id="settings-wd-end" class="admin-select"></select>
                     </div>
                   </div>
                   <!-- Saturday -->
-                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 1rem;">
-                    <span style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: bold; width: 120px;">Saturdays:</span>
-                    <div style="display:flex; gap: 0.5rem; align-items:center;">
-                      <select id="settings-sat-start" class="admin-select" style="padding: 0.5rem 2rem 0.5rem 0.5rem; font-size: 0.85rem;"></select>
+                  <div class="admin-timing-row">
+                    <span class="admin-timing-label">Saturdays:</span>
+                    <div class="admin-timing-selects">
+                      <select id="settings-sat-start" class="admin-select"></select>
                       <span>to</span>
-                      <select id="settings-sat-end" class="admin-select" style="padding: 0.5rem 2rem 0.5rem 0.5rem; font-size: 0.85rem;"></select>
+                      <select id="settings-sat-end" class="admin-select"></select>
                     </div>
                   </div>
                   <!-- Sunday -->
-                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-                    <span style="font-family: var(--font-mono); font-size: 0.9rem; font-weight: bold; width: 120px;">Sundays:</span>
-                    <div style="display:flex; gap: 0.5rem; align-items:center;">
-                      <select id="settings-sun-start" class="admin-select" style="padding: 0.5rem 2rem 0.5rem 0.5rem; font-size: 0.85rem;"></select>
+                  <div class="admin-timing-row">
+                    <span class="admin-timing-label">Sundays:</span>
+                    <div class="admin-timing-selects">
+                      <select id="settings-sun-start" class="admin-select"></select>
                       <span>to</span>
-                      <select id="settings-sun-end" class="admin-select" style="padding: 0.5rem 2rem 0.5rem 0.5rem; font-size: 0.85rem;"></select>
+                      <select id="settings-sun-end" class="admin-select"></select>
                     </div>
                   </div>
-                  <button type="submit" class="admin-btn admin-btn-primary hover-target">Save Hours</button>
+                  <button type="submit" class="admin-btn admin-btn-primary hover-target" style="margin-top: 1rem;">Save Hours</button>
                 </form>
               </div>
   
@@ -2566,35 +2580,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Render Dashboard Analytics UI
       const html = `
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-          <div class="admin-glass-panel" style="text-align: center; padding: 2rem;">
+        <div class="admin-stats-grid">
+          <div class="admin-glass-panel admin-stat-card">
             <h4 style="font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem;">Completed Revenue</h4>
-            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #2E8B57; font-weight: 500; margin: 0;">INR ${revenueCompleted}</p>
+            <p class="admin-stat-value" style="color: #2E8B57;">INR ${revenueCompleted}</p>
             <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">${totalCompleted} bookings</span>
           </div>
-          <div class="admin-glass-panel" style="text-align: center; padding: 2rem;">
+          <div class="admin-glass-panel admin-stat-card">
             <h4 style="font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem;">Projected Revenue</h4>
-            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #FF8C00; font-weight: 500; margin: 0;">INR ${revenueProjected}</p>
+            <p class="admin-stat-value" style="color: #FF8C00;">INR ${revenueProjected}</p>
             <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">${totalActive} active bookings</span>
           </div>
-          <div class="admin-glass-panel" style="text-align: center; padding: 2rem;">
+          <div class="admin-glass-panel admin-stat-card">
             <h4 style="font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.5rem;">Queue Waitlist</h4>
-            <p style="font-family: var(--font-serif); font-size: 2.5rem; color: #4682B4; font-weight: 500; margin: 0;">${totalQueue}</p>
+            <p class="admin-stat-value" style="color: #4682B4;">${totalQueue}</p>
             <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-mono);">in queue</span>
           </div>
         </div>
 
         <!-- Weekly Bookings Trend SVG card -->
-        <div class="admin-glass-panel" style="margin-bottom: 2rem; overflow: visible;">
-          <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin-bottom: 2rem;">7-Day Bookings Trend</h3>
-          <div style="width: 100%; overflow-x: auto; padding: 1rem 0;">
-            <div style="min-width: 500px;">
+        <div class="admin-glass-panel" style="margin-bottom: 2rem; overflow: hidden;">
+          <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin-bottom: 1.5rem;">7-Day Bookings Trend</h3>
+          <div style="width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0.5rem 0;">
+            <div style="min-width: 480px;">
               ${lineGraphSvg}
             </div>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+        <div class="admin-analytics-two-col">
           <!-- Barber Performance & Donut Chart -->
           <div class="admin-glass-panel" style="padding: 2rem;">
             <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin-bottom: 2rem;">Barber Performance</h3>
@@ -2756,7 +2770,7 @@ document.addEventListener('DOMContentLoaded', () => {
               ${posBadge}
               <div style="padding:0.75rem;">
                 <p style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:0.5rem;" title="${safeFile}">${safeFile}</p>
-                <div style="display:flex;gap:0.4rem;margin-bottom:0.5rem;">
+                <div class="gallery-card-actions">
                   <button class="gallery-move-btn" data-file="${safePublicId}" data-dir="left" title="Move left"
                     style="flex:0 0 auto;width:32px;font-size:0.85rem;padding:0.3rem;border:1px solid rgba(0,0,0,0.15);background:transparent;border-radius:6px;cursor:none;transition:all 0.2s;"
                     ${index === 0 ? 'disabled style="opacity:0.3;pointer-events:none;flex:0 0 auto;width:32px;font-size:0.85rem;padding:0.3rem;border:1px solid rgba(0,0,0,0.15);background:transparent;border-radius:6px;cursor:none;"' : ''}>◀</button>
@@ -2950,7 +2964,17 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       // Use admin endpoint to get ALL services (incl. hidden ones)
       const res = await authFetch('/api/admin/services');
-      servicesList = await res.json();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        tableBody.innerHTML = `<div style="grid-column: 1/-1; padding: 3rem; text-align: center; color: #d32f2f; font-family: var(--font-mono);">${errData.error || 'Failed to load services.'}</div>`;
+        return;
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        tableBody.innerHTML = '<div style="grid-column: 1/-1; padding: 3rem; text-align: center; color: #d32f2f; font-family: var(--font-mono);">Failed to load services.</div>';
+        return;
+      }
+      servicesList = data;
       
       tableBody.innerHTML = '';
       if (servicesList.length === 0) {
@@ -3006,24 +3030,24 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         tableBody.appendChild(card);
       });
-      
-      // Global event delegation on document already handles cursor hover for all dynamic elements.
     } catch {
       tableBody.innerHTML = '<div style="grid-column: 1/-1; padding: 3rem; text-align: center; color: red;">Error loading services.</div>';
     }
   }
 
-  // Listen for Services Action Clicks
+  // Listen for Services Action Clicks via event delegation
   document.body.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
+    if (!target) return;
 
     // Visibility toggle
-    if (target.matches('.admin-toggle-visibility-btn')) {
-      const id = target.dataset.id!;
-      const currentlyVisible = target.dataset.visible === 'true';
+    const toggleBtn = target.closest<HTMLElement>('.admin-toggle-visibility-btn');
+    if (toggleBtn) {
+      const id = toggleBtn.dataset.id!;
+      const currentlyVisible = toggleBtn.dataset.visible === 'true';
       const newVisible = !currentlyVisible;
-      target.textContent = '…';
-      (target as HTMLButtonElement).disabled = true;
+      toggleBtn.textContent = '…';
+      (toggleBtn as HTMLButtonElement).disabled = true;
       try {
         const res = await authFetch(`/api/admin/services/${id}/visibility`, {
           method: 'PATCH',
@@ -3036,21 +3060,23 @@ document.addEventListener('DOMContentLoaded', () => {
           fetchAdminServicesData();
         } else {
           showToast('Failed to update visibility.', 'error');
-          (target as HTMLButtonElement).disabled = false;
-          target.textContent = currentlyVisible ? '🙈 Hide' : '👁 Show';
+          (toggleBtn as HTMLButtonElement).disabled = false;
+          toggleBtn.textContent = currentlyVisible ? '🙈 Hide' : '👁 Show';
         }
       } catch {
         showToast('Network error.', 'error');
-        (target as HTMLButtonElement).disabled = false;
+        (toggleBtn as HTMLButtonElement).disabled = false;
       }
       return;
     }
 
-    if (target.matches('.admin-delete-service-btn')) {
-      const id = target.dataset.id!;
+    // Delete service
+    const delBtn = target.closest<HTMLElement>('.admin-delete-service-btn');
+    if (delBtn) {
+      const id = delBtn.dataset.id!;
       if (!confirm('Delete this service?')) return;
-      target.textContent = '…';
-      target.style.opacity = '0.5';
+      delBtn.textContent = '…';
+      delBtn.style.opacity = '0.5';
       const res = await authFetch(`/api/admin/services/${id}`, { method: 'DELETE' });
       if (res.ok) {
         showToast('Service deleted successfully!', 'success');
@@ -3058,95 +3084,102 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchAdminServicesData();
       } else {
         showToast('Delete failed', 'error');
-        target.textContent = 'Delete';
-        target.style.opacity = '1';
+        delBtn.textContent = 'Delete';
+        delBtn.style.opacity = '1';
       }
       return;
     }
 
-    if (target.matches('.admin-edit-service-btn')) {
-      const id = target.dataset.id!;
+    // Edit service
+    const editBtn = target.closest<HTMLElement>('.admin-edit-service-btn');
+    if (editBtn) {
+      const id = editBtn.dataset.id!;
       const s = servicesList.find(item => item._id === id);
       if (!s) return;
 
-      const formWrap = document.getElementById('admin-service-form-wrap')!;
-      const formTitle = document.getElementById('admin-service-form-title')!;
+      const formWrap = document.getElementById('admin-service-form-wrap');
+      const formTitle = document.getElementById('admin-service-form-title');
       const asId = document.getElementById('as-id') as HTMLInputElement;
       const asName = document.getElementById('as-name') as HTMLInputElement;
       const asGender = document.getElementById('as-gender') as HTMLSelectElement;
       const asDuration = document.getElementById('as-duration') as HTMLInputElement;
       const asPrice = document.getElementById('as-price') as HTMLInputElement;
 
-      asId.value = s._id;
-      asName.value = s.name;
-      asGender.value = s.gender;
-      asDuration.value = s.duration.toString();
-      asPrice.value = s.price.toString();
+      if (asId) asId.value = s._id;
+      if (asName) asName.value = s.name;
+      if (asGender) asGender.value = s.gender;
+      if (asDuration) asDuration.value = s.duration.toString();
+      if (asPrice) asPrice.value = s.price.toString();
 
-      formTitle.textContent = 'Edit Service';
-      formWrap.classList.add('active');
+      if (formTitle) formTitle.textContent = 'Edit Service';
+      if (formWrap) formWrap.classList.add('active');
+      return;
+    }
+
+    // Open Add Service Modal
+    const addBtn = target.closest<HTMLElement>('#admin-add-service-btn');
+    if (addBtn) {
+      const formWrap = document.getElementById('admin-service-form-wrap');
+      const form = document.getElementById('admin-service-form') as HTMLFormElement;
+      const formTitle = document.getElementById('admin-service-form-title');
+      const asId = document.getElementById('as-id') as HTMLInputElement;
+      if (form) form.reset();
+      if (asId) asId.value = '';
+      if (formTitle) formTitle.textContent = 'Add New Service';
+      if (formWrap) formWrap.classList.add('active');
+      return;
+    }
+
+    // Close or cancel service modal
+    const closeOrCancelBtn = target.closest<HTMLElement>('#admin-service-form-cancel-btn, #admin-service-form-close-btn');
+    if (closeOrCancelBtn) {
+      const formWrap = document.getElementById('admin-service-form-wrap');
+      if (formWrap) formWrap.classList.remove('active');
       return;
     }
   });
 
-  // Service Form Handler Init
-  const handleServiceFormInit = () => {
-    const addBtn = document.getElementById('admin-add-service-btn');
-    const cancelBtn = document.getElementById('admin-service-form-cancel-btn');
-    const closeBtn = document.getElementById('admin-service-form-close-btn');
-    const formWrap = document.getElementById('admin-service-form-wrap');
-    const form = document.getElementById('admin-service-form') as HTMLFormElement;
-    const formTitle = document.getElementById('admin-service-form-title');
+  // Listen for Service Form Submit via event delegation
+  document.body.addEventListener('submit', async (e) => {
+    const form = (e.target as HTMLElement)?.closest<HTMLFormElement>('#admin-service-form');
+    if (!form) return;
+    e.preventDefault();
+
     const asId = document.getElementById('as-id') as HTMLInputElement;
+    const id = asId ? asId.value.trim() : '';
+    const name = (document.getElementById('as-name') as HTMLInputElement)?.value.trim() || '';
+    const gender = (document.getElementById('as-gender') as HTMLSelectElement)?.value || 'Male';
+    const duration = (document.getElementById('as-duration') as HTMLInputElement)?.value || '30';
+    const price = (document.getElementById('as-price') as HTMLInputElement)?.value || '0';
 
-    if (addBtn && formWrap && form) {
-      addBtn.addEventListener('click', () => {
+    const url = id ? `/api/admin/services/${id}` : '/api/admin/services';
+    const method = id ? 'PUT' : 'POST';
+
+    try {
+      const res = await authFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, gender, duration, price })
+      });
+
+      if (res.ok) {
+        showToast(id ? 'Service updated successfully!' : 'Service created successfully!', 'success');
+        const formWrap = document.getElementById('admin-service-form-wrap');
+        if (formWrap) formWrap.classList.remove('active');
         form.reset();
-        asId.value = '';
-        if (formTitle) formTitle.textContent = 'Add New Service';
-        formWrap.classList.add('active');
-      });
-
-      const hideModal = () => {
-        formWrap.classList.remove('active');
-      };
-
-      cancelBtn?.addEventListener('click', hideModal);
-      closeBtn?.addEventListener('click', hideModal);
-
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const id = asId.value;
-        const name = (document.getElementById('as-name') as HTMLInputElement).value;
-        const gender = (document.getElementById('as-gender') as HTMLSelectElement).value;
-        const duration = (document.getElementById('as-duration') as HTMLInputElement).value;
-        const price = (document.getElementById('as-price') as HTMLInputElement).value;
-
-        const url = id ? `/api/admin/services/${id}` : '/api/admin/services';
-        const method = id ? 'PUT' : 'POST';
-
-        try {
-          const res = await authFetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, gender, duration, price })
-          });
-
-          if (res.ok) {
-            showToast(id ? 'Service updated successfully!' : 'Service created successfully!', 'success');
-            hideModal();
-            form.reset();
-            await fetchServices();
-            fetchAdminServicesData();
-          } else {
-            showToast('Failed to save service.', 'error');
-          }
-        } catch {
-          showToast('Network error while saving service.', 'error');
-        }
-      });
+        await fetchServices();
+        fetchAdminServicesData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData.error || 'Failed to save service.', 'error');
+      }
+    } catch {
+      showToast('Network error while saving service.', 'error');
     }
-  };
+  });
+
+  // Service Form Handler Init (fallback)
+  const handleServiceFormInit = () => {};
 
   // Search/Filter catalog listeners
   const searchInputCatalog = document.getElementById('catalog-search') as HTMLInputElement;
