@@ -1344,68 +1344,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="admin-actions-toolbar">
           <button id="toggle-manual-booking-btn" class="admin-btn admin-btn-primary hover-target">+ Add Manual Booking</button>
           <button id="export-bookings-csv-btn" class="admin-btn admin-btn-secondary hover-target">Export CSV</button>
-          
-          <div id="manual-booking-form-wrap" class="admin-modal-overlay">
-            <div class="admin-glass-panel admin-modal-card">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin: 0;">Add Manual Appointment</h3>
-                <button type="button" id="mb-close-btn" class="hover-target" style="background:transparent; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-secondary);">&times;</button>
-              </div>
-              <form id="admin-manual-booking-form">
-                <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap: wrap;">
-                  <div style="flex:1; min-width: 200px;">
-                    <label class="admin-label">Name</label>
-                    <input type="text" id="mb-name" required class="admin-input" placeholder="e.g. Rahul Sharma">
-                  </div>
-                  <div style="flex:1; min-width: 200px;">
-                    <label class="admin-label">Phone</label>
-                    <input type="tel" id="mb-phone" required class="admin-input" placeholder="e.g. 9876543210">
-                  </div>
-                </div>
-                <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap: wrap;">
-                  <div style="flex:1; min-width: 200px;">
-                    <label class="admin-label">Gender</label>
-                    <select id="mb-gender" required class="admin-select">
-                      <option value="" disabled selected>Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                    </select>
-                  </div>
-                  <div style="flex:1; min-width: 200px;">
-                    <label class="admin-label">Service</label>
-                    <select id="mb-service" required class="admin-select">
-                      <option value="" disabled selected>Select Gender First</option>
-                    </select>
-                  </div>
-                </div>
-                <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap: wrap;">
-                  <div style="flex:1; min-width: 200px;">
-                    <label class="admin-label">Barber</label>
-                    <select id="mb-barber" required class="admin-select">
-                      <option value="Any Available">Any Available</option>
-                      <option value="Bobby">Bobby</option>
-                      <option value="Sumit">Sumit</option>
-                      <option value="shetty Bhai">shetty Bhai</option>
-                    </select>
-                  </div>
-                  <div style="flex:1; min-width: 200px;">
-                    <label class="admin-label">Date</label>
-                    <input type="date" id="mb-date" class="admin-input" required>
-                  </div>
-                </div>
-                <div class="admin-form-group">
-                  <label class="admin-label">Time Slot</label>
-                  <select id="mb-time" required class="admin-select">
-                    <option value="" disabled selected>Select Date First</option>
-                  </select>
-                </div>
-                <div class="admin-modal-actions">
-                  <button type="button" id="mb-cancel-btn" class="admin-btn admin-btn-secondary hover-target">Cancel</button>
-                  <button type="submit" class="admin-btn admin-btn-primary hover-target">Book Slot</button>
-                </div>
-              </form>
-            </div>
-          </div>
         </div>
         
         <!-- Search Bar with wrapper -->
@@ -1439,8 +1377,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Booked slots table
       html += `
-        <div id="wrap-bookings" style="margin-bottom: 3rem;">
-          <h2 id="hdr-bookings" style="margin-top: 0; color: var(--theme-main); font-family: var(--font-serif); font-size: 2.2rem; margin-bottom: 1rem;">Booked Slots</h2>
+        <div id="wrap-bookings" class="admin-glass-panel" style="margin-bottom: 2rem;">
+          <h2 id="hdr-bookings" style="margin-top: 0; color: var(--theme-main); font-family: var(--font-serif); font-size: 2rem; margin-bottom: 1rem;">Booked Slots</h2>
           <div class="admin-table-container">
             <table class="admin-table" id="table-bookings">
               <thead>
@@ -1463,16 +1401,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         html += `
           <tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)} ${escapeHtml(b.service.toLowerCase())} ${escapeHtml((b.barber || '').toLowerCase())}" data-date="${escapeHtml(b.date)}" data-barber="${escapeHtml(b.barber || 'Any Available')}" data-status="booked">
-            <td class="admin-td">${escapeHtml(b.date)}</td>
-            <td class="admin-td"><strong>${escapeHtml(b.time)}</strong></td>
-            <td class="admin-td">${escapeHtml(b.name)}</td>
-            <td class="admin-td">${escapeHtml(b.phone)}</td>
-            <td class="admin-td">${escapeHtml(b.service)}</td>
-            <td class="admin-td"><span class="admin-badge admin-badge-booked">${escapeHtml(b.barber || 'N/A')}</span></td>
-            <td class="admin-td" style="white-space: nowrap;">
-              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-primary hover-target" data-action="complete" data-id="${escapeHtml(b.createdAt)}" style="margin-right: 5px;">Complete</button>
-              <a href="${waLink}" target="_blank" class="admin-btn admin-btn-sm admin-btn-secondary hover-target" style="margin-right: 5px; text-decoration: none;">
-                <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; margin-right: 3px; vertical-align: middle;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Reminder
+            <td class="admin-td" data-label="Date">${escapeHtml(b.date)}</td>
+            <td class="admin-td" data-label="Time"><strong>${escapeHtml(b.time)}</strong></td>
+            <td class="admin-td" data-label="Client">${escapeHtml(b.name)}</td>
+            <td class="admin-td" data-label="Phone"><a href="tel:${escapeHtml(b.phone)}" style="color:inherit;text-decoration:none;">${escapeHtml(b.phone)}</a></td>
+            <td class="admin-td" data-label="Service">${escapeHtml(b.service)}</td>
+            <td class="admin-td" data-label="Barber"><span class="admin-badge admin-badge-booked">${escapeHtml(b.barber || 'N/A')}</span></td>
+            <td class="admin-td admin-td-actions" data-label="Actions">
+              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-primary hover-target" data-action="complete" data-id="${escapeHtml(b.createdAt)}">Complete</button>
+              <a href="${waLink}" target="_blank" class="admin-btn admin-btn-sm admin-btn-secondary hover-target" style="text-decoration: none;">
+                <svg viewBox="0 0 24 24" style="width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; margin-right: 3px; vertical-align: middle;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Reminder
               </a>
               ${deleteBtn}
             </td>
@@ -1486,8 +1424,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Waitlist Queue table
       html += `
-        <div id="wrap-queue" style="margin-bottom: 3rem;">
-          <h2 id="hdr-queue" style="color: var(--theme-main); font-family: var(--font-serif); font-size: 2.2rem; margin-bottom: 1rem;">Waitlist Queue</h2>
+        <div id="wrap-queue" class="admin-glass-panel" style="margin-bottom: 2rem;">
+          <h2 id="hdr-queue" style="color: var(--theme-main); font-family: var(--font-serif); font-size: 2rem; margin-bottom: 1rem;">Waitlist Queue</h2>
           <div class="admin-table-container">
             <table class="admin-table" id="table-queue">
               <thead>
@@ -1507,14 +1445,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const deleteBtn = `<button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}">Cancel</button>`;
         html += `
           <tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)} ${escapeHtml(b.service.toLowerCase())} ${escapeHtml((b.barber || '').toLowerCase())}" data-date="${escapeHtml(b.date)}" data-barber="${escapeHtml(b.barber || 'Any Available')}" data-status="waitlist">
-            <td class="admin-td">${escapeHtml(b.date)}</td>
-            <td class="admin-td"><strong>${escapeHtml(b.time)}</strong></td>
-            <td class="admin-td">${escapeHtml(b.name)}</td>
-            <td class="admin-td">${escapeHtml(b.phone)}</td>
-            <td class="admin-td">${escapeHtml(b.service)}</td>
-            <td class="admin-td"><span class="admin-badge admin-badge-waitlist">${escapeHtml(b.barber || 'N/A')}</span></td>
-            <td class="admin-td" style="white-space: nowrap;">
-              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-primary hover-target" data-action="approve" data-id="${escapeHtml(b.createdAt)}" style="margin-right: 5px;">Approve</button>
+            <td class="admin-td" data-label="Date">${escapeHtml(b.date)}</td>
+            <td class="admin-td" data-label="Time"><strong>${escapeHtml(b.time)}</strong></td>
+            <td class="admin-td" data-label="Client">${escapeHtml(b.name)}</td>
+            <td class="admin-td" data-label="Phone"><a href="tel:${escapeHtml(b.phone)}" style="color:inherit;text-decoration:none;">${escapeHtml(b.phone)}</a></td>
+            <td class="admin-td" data-label="Service">${escapeHtml(b.service)}</td>
+            <td class="admin-td" data-label="Barber"><span class="admin-badge admin-badge-waitlist">${escapeHtml(b.barber || 'N/A')}</span></td>
+            <td class="admin-td admin-td-actions" data-label="Actions">
+              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-primary hover-target" data-action="approve" data-id="${escapeHtml(b.createdAt)}">Approve</button>
               ${deleteBtn}
             </td>
           </tr>
@@ -1527,8 +1465,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Completed History table
       html += `
-        <div id="wrap-completed">
-          <h2 id="hdr-completed" style="color: var(--text-secondary); font-family: var(--font-serif); font-size: 2.2rem; margin-bottom: 1rem;">Completed History</h2>
+        <div id="wrap-completed" class="admin-glass-panel">
+          <h2 id="hdr-completed" style="color: var(--text-secondary); font-family: var(--font-serif); font-size: 2rem; margin-bottom: 1rem;">Completed History</h2>
           <div class="admin-table-container" style="opacity: 0.85;">
             <table class="admin-table" id="table-completed">
               <thead>
@@ -1547,12 +1485,12 @@ document.addEventListener('DOMContentLoaded', () => {
       data.completedSlots.forEach((b: any) => {
         html += `
           <tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)} ${escapeHtml(b.service.toLowerCase())} ${escapeHtml((b.barber || '').toLowerCase())}" data-date="${escapeHtml(b.date)}" data-barber="${escapeHtml(b.barber || 'Any Available')}" data-status="completed">
-            <td class="admin-td">${escapeHtml(b.date)}</td>
-            <td class="admin-td"><strong>${escapeHtml(b.time)}</strong></td>
-            <td class="admin-td">${escapeHtml(b.name)}</td>
-            <td class="admin-td">${escapeHtml(b.phone)}</td>
-            <td class="admin-td">${escapeHtml(b.service)}</td>
-            <td class="admin-td"><span class="admin-badge admin-badge-completed">${escapeHtml(b.barber || 'N/A')}</span></td>
+            <td class="admin-td" data-label="Date">${escapeHtml(b.date)}</td>
+            <td class="admin-td" data-label="Time"><strong>${escapeHtml(b.time)}</strong></td>
+            <td class="admin-td" data-label="Client">${escapeHtml(b.name)}</td>
+            <td class="admin-td" data-label="Phone">${escapeHtml(b.phone)}</td>
+            <td class="admin-td" data-label="Service">${escapeHtml(b.service)}</td>
+            <td class="admin-td" data-label="Barber"><span class="admin-badge admin-badge-completed">${escapeHtml(b.barber || 'N/A')}</span></td>
           </tr>
         `;
       });
@@ -1687,125 +1625,6 @@ document.addEventListener('DOMContentLoaded', () => {
           document.body.removeChild(link);
           showToast('CSV export successful!', 'success');
         });
-
-        // Modal overlay toggle for manual booking form
-        const toggleBtn = document.getElementById('toggle-manual-booking-btn');
-        const formWrap = document.getElementById('manual-booking-form-wrap');
-        const cancelBtn = document.getElementById('mb-cancel-btn');
-        const closeBtn = document.getElementById('mb-close-btn');
-
-        if (toggleBtn && formWrap) {
-          toggleBtn.addEventListener('click', () => {
-            formWrap.classList.add('active');
-          });
-          const hideModal = () => {
-            formWrap.classList.remove('active');
-          };
-          cancelBtn?.addEventListener('click', hideModal);
-          closeBtn?.addEventListener('click', hideModal);
-          formWrap.addEventListener('click', (e) => {
-            if (e.target === formWrap) hideModal();
-          });
-        }
-
-        // Gender changes in manual booking
-        const mbGender = document.getElementById('mb-gender') as HTMLSelectElement;
-        const mbService = document.getElementById('mb-service') as HTMLSelectElement;
-        const mbBarber = document.getElementById('mb-barber') as HTMLSelectElement;
-        if (mbGender && mbService) {
-          mbGender.addEventListener('change', () => {
-            const gender = mbGender.value;
-            mbService.innerHTML = '<option value="" disabled selected>Select Service</option>';
-            const filtered = servicesList.filter((s: any) => s.gender === gender || s.gender === 'Unisex');
-            filtered.forEach((s: any) => {
-              const opt = document.createElement('option');
-              opt.value = s.name; opt.textContent = s.name;
-              mbService.appendChild(opt);
-            });
-            if (gender === 'Female') {
-              mbBarber.innerHTML = '<option value="Sumit" selected>Sumit (Specialist)</option>';
-            } else {
-              mbBarber.innerHTML = `
-                <option value="Any Available">Any Available</option>
-                <option value="Bobby">Bobby</option>
-                <option value="Sumit">Sumit</option>
-                <option value="shetty Bhai">shetty Bhai</option>
-              `;
-            }
-          });
-        }
-
-        // Date changes in manual booking
-        const mbDate = document.getElementById('mb-date') as HTMLInputElement;
-        const mbTime = document.getElementById('mb-time') as HTMLSelectElement;
-        if (mbDate && mbTime) {
-          const today = getIndiaDateString();
-          mbDate.min = today;
-          mbDate.value = today;
-
-          const loadMbSlots = async () => {
-            const date = mbDate.value;
-            mbTime.innerHTML = '<option value="" disabled selected>Loading slots...</option>';
-            try {
-              const res = await fetch(`/api/slots?date=${date}`);
-              const data = await res.json();
-              mbTime.innerHTML = '<option value="" disabled selected>Select Time</option>';
-              (data.slots || []).forEach((s: any) => {
-                if (s.isBreak) return; // skip break slots
-                const opt = document.createElement('option');
-                opt.value = s.time;
-                const typeLabel = s.type === 'beard_only' ? '(Beard Only)' : '(Haircut+Beard)';
-                const statusLabel = s.taken ? ' — FULL' : (s.bookingCount === 1 ? ' — 1 spot left' : '');
-                opt.textContent = `${s.label || s.time} ${typeLabel}${statusLabel}`;
-                if (s.isBreak) opt.disabled = true;
-                mbTime.appendChild(opt);
-              });
-            } catch {
-              mbTime.innerHTML = '<option value="" disabled selected>Error loading slots</option>';
-            }
-          };
-
-          mbDate.addEventListener('change', () => {
-            mbTime.value = '';
-            loadMbSlots();
-          });
-
-          // Load today's slots initially
-          loadMbSlots();
-        }
-
-        // Handle manual booking submit
-        const mbForm = document.getElementById('admin-manual-booking-form') as HTMLFormElement;
-        if (mbForm && formWrap) {
-          mbForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const name = (document.getElementById('mb-name') as HTMLInputElement).value;
-            const phone = (document.getElementById('mb-phone') as HTMLInputElement).value;
-            const gender = mbGender.value;
-            const service = mbService.value;
-            const barber = mbBarber.value;
-            const date = mbDate.value;
-            const time = mbTime.value;
-
-            try {
-              const res = await fetch('/api/book', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ date, time, name, phone, gender, service, barber, isQueue: false })
-              });
-              if (res.ok) {
-                showToast('Manual booking created successfully!', 'success');
-                formWrap.classList.remove('active');
-                fetchAdminData();
-              } else {
-                const err = await res.json();
-                showToast(err.error || 'Failed to book slot', 'error');
-              }
-            } catch {
-              showToast('Network error while manual booking.', 'error');
-            }
-          });
-        }
       }
     } catch {
       const adminContentDiv = document.getElementById('admin-content');
@@ -1889,9 +1708,72 @@ document.addEventListener('DOMContentLoaded', () => {
           <main class="admin-main-content">
             <!-- Bookings Panel -->
             <div id="panel-bookings">
-              <div id="admin-content" class="admin-glass-panel">
+              <div id="admin-content">
                 <div class="spinner"></div>
                 <p style="text-align: center; margin-top: 1rem; font-family: var(--font-mono); color: var(--theme-main);">Loading data...</p>
+              </div>
+
+              <!-- Manual Booking Form Modal Overlay -->
+              <div id="manual-booking-form-wrap" class="admin-modal-overlay">
+                <div class="admin-glass-panel admin-modal-card">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin: 0;">Add Manual Appointment</h3>
+                    <button type="button" id="mb-close-btn" class="hover-target" style="background:transparent; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-secondary);">&times;</button>
+                  </div>
+                  <form id="admin-manual-booking-form">
+                    <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap: wrap;">
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">Name</label>
+                        <input type="text" id="mb-name" required class="admin-input" placeholder="e.g. Rahul Sharma">
+                      </div>
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">Phone</label>
+                        <input type="tel" id="mb-phone" required class="admin-input" placeholder="e.g. 9876543210">
+                      </div>
+                    </div>
+                    <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap: wrap;">
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">Gender</label>
+                        <select id="mb-gender" required class="admin-select">
+                          <option value="" disabled selected>Select Gender</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                        </select>
+                      </div>
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">Service</label>
+                        <select id="mb-service" required class="admin-select">
+                          <option value="" disabled selected>Select Gender First</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style="display:flex; gap:1rem; margin-bottom:1rem; flex-wrap: wrap;">
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">Barber</label>
+                        <select id="mb-barber" required class="admin-select">
+                          <option value="Any Available">Any Available</option>
+                          <option value="Bobby">Bobby</option>
+                          <option value="Sumit">Sumit</option>
+                          <option value="shetty Bhai">shetty Bhai</option>
+                        </select>
+                      </div>
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">Date</label>
+                        <input type="date" id="mb-date" class="admin-input" required>
+                      </div>
+                    </div>
+                    <div class="admin-form-group">
+                      <label class="admin-label">Time Slot</label>
+                      <select id="mb-time" required class="admin-select">
+                        <option value="" disabled selected>Select Date First</option>
+                      </select>
+                    </div>
+                    <div class="admin-modal-actions">
+                      <button type="button" id="mb-cancel-btn" class="admin-btn admin-btn-secondary hover-target">Cancel</button>
+                      <button type="submit" class="admin-btn admin-btn-primary hover-target">Book Slot</button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
   
@@ -2325,6 +2207,122 @@ document.addEventListener('DOMContentLoaded', () => {
           adminPassword = '';
           window.location.hash = '';
           window.location.reload();
+        });
+      }
+
+      // Manual Booking Modal setup
+      const mbWrap = document.getElementById('manual-booking-form-wrap');
+      const mbGender = document.getElementById('mb-gender') as HTMLSelectElement;
+      const mbService = document.getElementById('mb-service') as HTMLSelectElement;
+      const mbBarber = document.getElementById('mb-barber') as HTMLSelectElement;
+      const mbDate = document.getElementById('mb-date') as HTMLInputElement;
+      const mbTime = document.getElementById('mb-time') as HTMLSelectElement;
+      const mbForm = document.getElementById('admin-manual-booking-form') as HTMLFormElement;
+
+      // Open modal
+      document.body.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest('#toggle-manual-booking-btn');
+        if (btn && mbWrap) {
+          mbWrap.classList.add('active');
+        }
+      });
+
+      // Close modal
+      const hideMbModal = () => { if (mbWrap) mbWrap.classList.remove('active'); };
+      document.getElementById('mb-cancel-btn')?.addEventListener('click', hideMbModal);
+      document.getElementById('mb-close-btn')?.addEventListener('click', hideMbModal);
+      mbWrap?.addEventListener('click', (e) => { if (e.target === mbWrap) hideMbModal(); });
+
+      // Gender change
+      if (mbGender && mbService) {
+        mbGender.addEventListener('change', () => {
+          const gender = mbGender.value;
+          mbService.innerHTML = '<option value="" disabled selected>Select Service</option>';
+          const filtered = servicesList.filter((s: any) => s.gender === gender || s.gender === 'Unisex');
+          filtered.forEach((s: any) => {
+            const opt = document.createElement('option');
+            opt.value = s.name; opt.textContent = s.name;
+            mbService.appendChild(opt);
+          });
+          if (gender === 'Female') {
+            mbBarber.innerHTML = '<option value="Sumit" selected>Sumit (Specialist)</option>';
+          } else {
+            mbBarber.innerHTML = `
+              <option value="Any Available">Any Available</option>
+              <option value="Bobby">Bobby</option>
+              <option value="Sumit">Sumit</option>
+              <option value="shetty Bhai">shetty Bhai</option>
+            `;
+          }
+        });
+      }
+
+      // Date change & slots loading
+      if (mbDate && mbTime) {
+        const today = getIndiaDateString();
+        mbDate.min = today;
+        mbDate.value = today;
+
+        const loadMbSlots = async () => {
+          const date = mbDate.value;
+          mbTime.innerHTML = '<option value="" disabled selected>Loading slots...</option>';
+          try {
+            const res = await fetch(`/api/slots?date=${date}`);
+            const data = await res.json();
+            mbTime.innerHTML = '<option value="" disabled selected>Select Time</option>';
+            (data.slots || []).forEach((s: any) => {
+              if (s.isBreak) return;
+              const opt = document.createElement('option');
+              opt.value = s.time;
+              const typeLabel = s.type === 'beard_only' ? '(Beard Only)' : '(Haircut+Beard)';
+              const statusLabel = s.taken ? ' — FULL' : (s.bookingCount === 1 ? ' — 1 spot left' : '');
+              opt.textContent = `${s.label || s.time} ${typeLabel}${statusLabel}`;
+              if (s.isBreak) opt.disabled = true;
+              mbTime.appendChild(opt);
+            });
+          } catch {
+            mbTime.innerHTML = '<option value="" disabled selected>Error loading slots</option>';
+          }
+        };
+
+        mbDate.addEventListener('change', () => {
+          mbTime.value = '';
+          loadMbSlots();
+        });
+
+        loadMbSlots();
+      }
+
+      // Submit manual booking
+      if (mbForm && mbWrap) {
+        mbForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const name = (document.getElementById('mb-name') as HTMLInputElement).value;
+          const phone = (document.getElementById('mb-phone') as HTMLInputElement).value;
+          const gender = mbGender.value;
+          const service = mbService.value;
+          const barber = mbBarber.value;
+          const date = mbDate.value;
+          const time = mbTime.value;
+
+          try {
+            const res = await fetch('/api/book', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ date, time, name, phone, gender, service, barber, isQueue: false })
+            });
+            if (res.ok) {
+              showToast('Manual booking created successfully!', 'success');
+              mbWrap.classList.remove('active');
+              mbForm.reset();
+              fetchAdminData();
+            } else {
+              const err = await res.json().catch(() => ({}));
+              showToast(err.error || 'Failed to create manual booking.', 'error');
+            }
+          } catch {
+            showToast('Server error while saving booking.', 'error');
+          }
         });
       }
 
