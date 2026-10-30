@@ -328,7 +328,7 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
 
 /**
  * Fixed salon slot schedule.
- * type: 'haircut_beard' = Haircut+Beard slot (40 min)
+ * type: 'haircut_beard' = Haircut+Beard slot (30 min)
  *       'beard_only'    = Beard-only slot (30 min)
  *       'break'         = Non-bookable break period
  *
@@ -336,31 +336,31 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
  * displayTime: the AM/PM string shown to customers
  */
 const FIXED_SLOT_SCHEDULE = [
-  { displayTime: '09:00 AM', endDisplayTime: '09:40 AM', type: 'haircut_beard' },
+  { displayTime: '09:00 AM', endDisplayTime: '09:30 AM', type: 'haircut_beard' },
   { displayTime: '09:30 AM', endDisplayTime: '10:00 AM', type: 'beard_only' },
-  { displayTime: '10:00 AM', endDisplayTime: '10:40 AM', type: 'haircut_beard' },
+  { displayTime: '10:00 AM', endDisplayTime: '10:30 AM', type: 'haircut_beard' },
   { displayTime: '10:30 AM', endDisplayTime: '11:00 AM', type: 'beard_only' },
-  { displayTime: '11:00 AM', endDisplayTime: '11:40 AM', type: 'haircut_beard' },
+  { displayTime: '11:00 AM', endDisplayTime: '11:30 AM', type: 'haircut_beard' },
   { displayTime: '11:30 AM', endDisplayTime: '12:00 PM', type: 'beard_only' },
-  { displayTime: '12:00 PM', endDisplayTime: '12:40 PM', type: 'haircut_beard' },
+  { displayTime: '12:00 PM', endDisplayTime: '12:30 PM', type: 'haircut_beard' },
   { displayTime: '12:30 PM', endDisplayTime: '01:00 PM', type: 'beard_only' },
   // LUNCH BREAK: 1:00 PM – 2:00 PM
   { displayTime: '01:00 PM', endDisplayTime: '02:00 PM', type: 'break', label: '🍽️ Lunch Break (1:00 PM – 2:00 PM)' },
-  { displayTime: '02:00 PM', endDisplayTime: '02:40 PM', type: 'haircut_beard' },
+  { displayTime: '02:00 PM', endDisplayTime: '02:30 PM', type: 'haircut_beard' },
   { displayTime: '02:30 PM', endDisplayTime: '03:00 PM', type: 'beard_only' },
-  { displayTime: '03:00 PM', endDisplayTime: '03:40 PM', type: 'haircut_beard' },
+  { displayTime: '03:00 PM', endDisplayTime: '03:30 PM', type: 'haircut_beard' },
   { displayTime: '03:30 PM', endDisplayTime: '04:00 PM', type: 'beard_only' },
-  { displayTime: '04:00 PM', endDisplayTime: '04:40 PM', type: 'haircut_beard' },
+  { displayTime: '04:00 PM', endDisplayTime: '04:30 PM', type: 'haircut_beard' },
   { displayTime: '04:30 PM', endDisplayTime: '05:00 PM', type: 'beard_only' },
-  { displayTime: '05:00 PM', endDisplayTime: '05:40 PM', type: 'haircut_beard' },
+  { displayTime: '05:00 PM', endDisplayTime: '05:30 PM', type: 'haircut_beard' },
   { displayTime: '05:30 PM', endDisplayTime: '06:00 PM', type: 'beard_only' },
-  { displayTime: '06:00 PM', endDisplayTime: '06:40 PM', type: 'haircut_beard' },
+  { displayTime: '06:00 PM', endDisplayTime: '06:30 PM', type: 'haircut_beard' },
   { displayTime: '06:30 PM', endDisplayTime: '07:00 PM', type: 'beard_only' },
-  { displayTime: '07:00 PM', endDisplayTime: '07:40 PM', type: 'haircut_beard' },
+  { displayTime: '07:00 PM', endDisplayTime: '07:30 PM', type: 'haircut_beard' },
   { displayTime: '07:30 PM', endDisplayTime: '08:00 PM', type: 'beard_only' },
   // EVENING BREAK: 8:00 PM – 8:20 PM
   { displayTime: '08:00 PM', endDisplayTime: '08:20 PM', type: 'break', label: '☕ Break (8:00 PM – 8:20 PM)' },
-  { displayTime: '08:20 PM', endDisplayTime: '09:00 PM', type: 'haircut_beard' },
+  { displayTime: '08:20 PM', endDisplayTime: '08:50 PM', type: 'haircut_beard' },
 ];
 
 // Parse a displayTime string like '09:00 AM' into minutes from midnight
@@ -649,7 +649,7 @@ async function seedServicesIfNeeded() {
     if (count === 0) {
       const defaultServices = [
         // Male
-        { name: "Haircut + Beard (40 Min)", gender: "Male", duration: 40, price: 110, active: true },
+        { name: "Haircut + Beard (30 Min)", gender: "Male", duration: 30, price: 110, active: true },
         { name: "Only Haircut (25 Min)", gender: "Male", duration: 25, price: 65, active: true },
         { name: "Only Beard (15 Min)", gender: "Male", duration: 15, price: 45, active: true },
         { name: "Clean Shave (15 Min)", gender: "Male", duration: 15, price: 45, active: true },
@@ -672,6 +672,12 @@ async function seedServicesIfNeeded() {
       ];
       await servicesCol.insertMany(defaultServices);
       console.log("🌱 Default services database seeded successfully!");
+    } else {
+      // Ensure existing Haircut + Beard service is updated to 30 Min
+      await servicesCol.updateMany(
+        { name: /Haircut\s*\+\s*Beard/i },
+        { $set: { name: "Haircut + Beard (30 Min)", duration: 30 } }
+      );
     }
   } catch (err) {
     console.error("Failed to seed services:", err);
@@ -772,8 +778,8 @@ app.get('/api/slots', async (req, res) => {
       const slotBookings = bookedForDate.filter(b => b.time === slotDef.displayTime);
 
       // Capacity per slot type:
-      //  beard_only    slots → 30 min window ÷ 15 min per service = 2 per barber → max 4 total
-      //  haircut_beard slots → 40 min window ÷ 40 min per service = 1 per barber → max 2 total
+      //  beard_only    slots → 30 min window ÷ 15 min per service = 2 per barber → max 6 total
+      //  haircut_beard slots → 30 min window ÷ 30 min per service = 1 per barber → max 3 total
       const perBarberMax = slotDef.type === 'beard_only' ? 2 : 1;
       const maxBookings  = perBarberMax * 3; // Bobby + Sumit + shetty Bhai
 
@@ -948,7 +954,7 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
         if (!queueRequested) {
           // Capacity per slot type:
           //  beard_only    → 2 customers per barber (15 min × 2 = 30 min window)
-          //  haircut_beard → 1 customer  per barber (40 min = 40 min window)
+          //  haircut_beard → 1 customer  per barber (30 min = 30 min window)
           const perBarberMax = slotDef.type === 'beard_only' ? 2 : 1;
 
           const bobbyCount = bookingsForSlot.filter(b => b.barber === 'Bobby').length;

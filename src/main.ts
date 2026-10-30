@@ -376,7 +376,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.id = `slot-${slot.time.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
       const isBeardSlot = slot.type === 'beard_only';
-      const slotTypeLabel = isBeardSlot ? 'Beard Only · 15 min' : 'Haircut + Beard · 40 min';
+      const slotTypeLabel = isBeardSlot ? 'Beard Only · 15 min' : 'Haircut + Beard · 30 min';
       const slotTypeColor = isBeardSlot ? 'rgba(70,130,180,0.85)' : 'rgba(51,75,51,0.85)';
       const slotTypeColorLight = isBeardSlot ? 'rgba(70,130,180,0.12)' : 'rgba(51,75,51,0.10)';
 
@@ -1773,7 +1773,7 @@ document.addEventListener('DOMContentLoaded', () => {
                       <button type="submit" class="admin-btn admin-btn-primary hover-target">Book Slot</button>
                     </div>
                   </form>
-                </div>
+                </div>  
               </div>
             </div>
   

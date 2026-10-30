@@ -141,7 +141,7 @@ function createMockDB() {
     ],
     services: [
       // Male
-      { name: "Haircut + Beard (40 Min)", gender: "Male", duration: 40, price: 110, active: true },
+      { name: "Haircut + Beard (30 Min)", gender: "Male", duration: 30, price: 110, active: true },
       { name: "Only Haircut (25 Min)", gender: "Male", duration: 25, price: 65, active: true },
       { name: "Only Beard (15 Min)", gender: "Male", duration: 15, price: 45, active: true },
       { name: "Clean Shave (15 Min)", gender: "Male", duration: 15, price: 45, active: true },
