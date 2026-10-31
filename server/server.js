@@ -328,8 +328,7 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
 
 /**
  * Fixed salon slot schedule.
- * type: 'haircut_beard' = Haircut+Beard slot (30 min)
- *       'beard_only'    = Beard-only slot (30 min)
+ * type: 'haircut_beard' = Standard salon slot (30 min) for all services
  *       'break'         = Non-bookable break period
  *
  * time: 24-hour minutes-from-midnight for easy comparison
@@ -337,27 +336,27 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
  */
 const FIXED_SLOT_SCHEDULE = [
   { displayTime: '09:00 AM', endDisplayTime: '09:30 AM', type: 'haircut_beard' },
-  { displayTime: '09:30 AM', endDisplayTime: '10:00 AM', type: 'beard_only' },
+  { displayTime: '09:30 AM', endDisplayTime: '10:00 AM', type: 'haircut_beard' },
   { displayTime: '10:00 AM', endDisplayTime: '10:30 AM', type: 'haircut_beard' },
-  { displayTime: '10:30 AM', endDisplayTime: '11:00 AM', type: 'beard_only' },
+  { displayTime: '10:30 AM', endDisplayTime: '11:00 AM', type: 'haircut_beard' },
   { displayTime: '11:00 AM', endDisplayTime: '11:30 AM', type: 'haircut_beard' },
-  { displayTime: '11:30 AM', endDisplayTime: '12:00 PM', type: 'beard_only' },
+  { displayTime: '11:30 AM', endDisplayTime: '12:00 PM', type: 'haircut_beard' },
   { displayTime: '12:00 PM', endDisplayTime: '12:30 PM', type: 'haircut_beard' },
-  { displayTime: '12:30 PM', endDisplayTime: '01:00 PM', type: 'beard_only' },
+  { displayTime: '12:30 PM', endDisplayTime: '01:00 PM', type: 'haircut_beard' },
   // LUNCH BREAK: 1:00 PM – 2:00 PM
   { displayTime: '01:00 PM', endDisplayTime: '02:00 PM', type: 'break', label: '🍽️ Lunch Break (1:00 PM – 2:00 PM)' },
   { displayTime: '02:00 PM', endDisplayTime: '02:30 PM', type: 'haircut_beard' },
-  { displayTime: '02:30 PM', endDisplayTime: '03:00 PM', type: 'beard_only' },
+  { displayTime: '02:30 PM', endDisplayTime: '03:00 PM', type: 'haircut_beard' },
   { displayTime: '03:00 PM', endDisplayTime: '03:30 PM', type: 'haircut_beard' },
-  { displayTime: '03:30 PM', endDisplayTime: '04:00 PM', type: 'beard_only' },
+  { displayTime: '03:30 PM', endDisplayTime: '04:00 PM', type: 'haircut_beard' },
   { displayTime: '04:00 PM', endDisplayTime: '04:30 PM', type: 'haircut_beard' },
-  { displayTime: '04:30 PM', endDisplayTime: '05:00 PM', type: 'beard_only' },
+  { displayTime: '04:30 PM', endDisplayTime: '05:00 PM', type: 'haircut_beard' },
   { displayTime: '05:00 PM', endDisplayTime: '05:30 PM', type: 'haircut_beard' },
-  { displayTime: '05:30 PM', endDisplayTime: '06:00 PM', type: 'beard_only' },
+  { displayTime: '05:30 PM', endDisplayTime: '06:00 PM', type: 'haircut_beard' },
   { displayTime: '06:00 PM', endDisplayTime: '06:30 PM', type: 'haircut_beard' },
-  { displayTime: '06:30 PM', endDisplayTime: '07:00 PM', type: 'beard_only' },
+  { displayTime: '06:30 PM', endDisplayTime: '07:00 PM', type: 'haircut_beard' },
   { displayTime: '07:00 PM', endDisplayTime: '07:30 PM', type: 'haircut_beard' },
-  { displayTime: '07:30 PM', endDisplayTime: '08:00 PM', type: 'beard_only' },
+  { displayTime: '07:30 PM', endDisplayTime: '08:00 PM', type: 'haircut_beard' },
   // EVENING BREAK: 8:00 PM – 8:20 PM
   { displayTime: '08:00 PM', endDisplayTime: '08:20 PM', type: 'break', label: '☕ Break (8:00 PM – 8:20 PM)' },
   { displayTime: '08:20 PM', endDisplayTime: '08:50 PM', type: 'haircut_beard' },
@@ -401,13 +400,6 @@ const getDurationDynamic = (serviceName, servicesMap) => {
 
 // Determine slot type from service name
 function getSlotTypeForService(serviceName) {
-  if (!serviceName) return null;
-  const s = serviceName.toLowerCase();
-  // Beard-only services
-  if ((s.includes('beard') || s.includes('shave')) && !s.includes('haircut') && !s.includes('hair cut')) {
-    return 'beard_only';
-  }
-  // Haircut+Beard or Haircut-only → goes to haircut_beard slots
   return 'haircut_beard';
 }
 
@@ -777,10 +769,8 @@ app.get('/api/slots', async (req, res) => {
 
       const slotBookings = bookedForDate.filter(b => b.time === slotDef.displayTime);
 
-      // Capacity per slot type:
-      //  beard_only    slots → 30 min window ÷ 15 min per service = 2 per barber → max 6 total
-      //  haircut_beard slots → 30 min window ÷ 30 min per service = 1 per barber → max 3 total
-      const perBarberMax = slotDef.type === 'beard_only' ? 2 : 1;
+      // Capacity per slot: 1 customer per barber (30 min window) → max 3 total (Bobby + Sumit + shetty Bhai)
+      const perBarberMax = 1;
       const maxBookings  = perBarberMax * 3; // Bobby + Sumit + shetty Bhai
 
       const bobbyBookings = slotBookings.filter(b => b.barber === 'Bobby');
@@ -906,13 +896,7 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
       return res.status(400).json({ error: 'Invalid service for the selected gender.' });
     }
 
-    // Validate service type vs slot type
-    const serviceSlotType = getSlotTypeForService(normalizedService);
-    if (slotDef.type === 'beard_only' && serviceSlotType !== 'beard_only') {
-      return res.status(400).json({ error: 'This time slot is only available for beard/shave services.' });
-    }
-    // haircut_beard slots accept both types
-
+    // All standard slots accept any valid service (beard_only restriction removed)
     const requestedDuration = Number(serviceDoc.duration) || getDurationDynamic(normalizedService);
     if (!Number.isFinite(requestedDuration) || requestedDuration < 5 || requestedDuration > 480) {
       return res.status(400).json({ error: 'Invalid service duration.' });
@@ -952,10 +936,8 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
         const bookingsForSlot = await bookings.find({ date, time }, { session }).toArray();
 
         if (!queueRequested) {
-          // Capacity per slot type:
-          //  beard_only    → 2 customers per barber (15 min × 2 = 30 min window)
-          //  haircut_beard → 1 customer  per barber (30 min = 30 min window)
-          const perBarberMax = slotDef.type === 'beard_only' ? 2 : 1;
+          // Capacity: 1 customer per barber per 30-min slot (max 3 total across Bobby, Sumit, shetty Bhai)
+          const perBarberMax = 1;
 
           const bobbyCount = bookingsForSlot.filter(b => b.barber === 'Bobby').length;
           const sumitCount = bookingsForSlot.filter(b => b.barber === 'Sumit').length;

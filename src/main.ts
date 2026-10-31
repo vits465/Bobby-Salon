@@ -312,16 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderSlots = () => {
     if (!timeSlotGrid) return;
     timeSlotGrid.innerHTML = '';
-    const selectedService = serviceInput ? serviceInput.value : '';
     const gender = genderInput ? genderInput.value : '';
-
-    // Determine the slot type required by the selected service
-    let requiredSlotType: string | null = null;
-    if (selectedService) {
-      const s = selectedService.toLowerCase();
-      const isBeardOnly = (s.includes('beard') || s.includes('shave')) && !s.includes('haircut') && !s.includes('hair cut');
-      requiredSlotType = isBeardOnly ? 'beard_only' : 'haircut_beard';
-    }
 
     if (currentSlotsData.length === 0) {
       timeSlotGrid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); font-family: var(--font-mono); padding: 2rem;">No available slots for this date.</p>`;
@@ -353,18 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // ── Determine visibility based on selected service ─────────
-      // Beard-only customers only see beard_only slots
-      // Haircut+Beard customers only see haircut_beard slots
-      // No service selected → show all slots
-      let isHidden = false;
-      if (requiredSlotType === 'beard_only' && slot.type !== 'beard_only') {
-        isHidden = true;
-      } else if (requiredSlotType === 'haircut_beard' && slot.type !== 'haircut_beard') {
-        isHidden = true;
-      }
-
-      // Also check female availability (Sumit must be free)
+      // Check female availability (Sumit must be free)
       let isTaken = slot.taken;
       if (gender === 'Female' && !slot.sumitAvailable) {
         isTaken = true;
@@ -375,14 +355,13 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.type = 'button';
       btn.id = `slot-${slot.time.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
-      const isBeardSlot = slot.type === 'beard_only';
-      const slotTypeLabel = isBeardSlot ? 'Beard Only · 15 min' : 'Haircut + Beard · 30 min';
-      const slotTypeColor = isBeardSlot ? 'rgba(70,130,180,0.85)' : 'rgba(51,75,51,0.85)';
-      const slotTypeColorLight = isBeardSlot ? 'rgba(70,130,180,0.12)' : 'rgba(51,75,51,0.10)';
+      const slotTypeLabel = '30 Min Slot';
+      const slotTypeColor = 'rgba(51,75,51,0.85)';
+      const slotTypeColorLight = 'rgba(51,75,51,0.10)';
 
       // Booking count — use server-provided values
       const bookedCount = slot.bookingCount || 0;
-      const maxCount = slot.maxBookings || (isBeardSlot ? 4 : 2);
+      const maxCount = slot.maxBookings || 3;
       const spotsLeft = slot.spotsLeft ?? Math.max(maxCount - bookedCount, 0);
 
       // Status badge: green / amber / red based on how full
@@ -426,9 +405,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const sumitPill = `<span style="font-size:0.58rem;background:${sumitBg};color:${sumitClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${sumitIcon} ${sumitLabel}</span>`;
       const shettyPill = `<span style="font-size:0.58rem;background:${shettyBg};color:${shettyClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${shettyIcon} ${shettyLabel}</span>`;
 
-      btn.className = `slot-btn hover-target ${isTaken ? 'taken' : ''} ${isHidden ? 'slot-hidden-type' : ''}`;
+      btn.className = `slot-btn hover-target ${isTaken ? 'taken' : ''}`;
       btn.style.animationDelay = `${index * 30}ms`;
-      btn.disabled = isHidden;
+      btn.disabled = false;
 
       btn.innerHTML = `
         <div class="slot-inner">
@@ -2740,9 +2719,9 @@ document.addEventListener('DOMContentLoaded', () => {
               if (s.isBreak) return;
               const opt = document.createElement('option');
               opt.value = s.time;
-              const typeLabel = s.type === 'beard_only' ? '(Beard Only)' : '(Haircut+Beard)';
-              const statusLabel = s.taken ? ' — FULL' : (s.bookingCount === 1 ? ' — 1 spot left' : '');
-              opt.textContent = `${s.label || s.time} ${typeLabel}${statusLabel}`;
+              const spotsText = s.spotsLeft !== undefined ? (s.spotsLeft === 1 ? ' — 1 spot left' : ` — ${s.spotsLeft} spots left`) : '';
+              const statusLabel = s.taken ? ' — FULL' : spotsText;
+              opt.textContent = `${s.label || s.time}${statusLabel}`;
               if (s.isBreak) opt.disabled = true;
               mbTime.appendChild(opt);
             });
