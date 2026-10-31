@@ -1313,10 +1313,12 @@ app.delete('/api/admin/bookings/:id', requireRole(['owner', 'staff']), async (re
     const id = req.params.id;
     const bookings = getBookingsCollection();
     const queueCol = getQueueCollection();
+    const completed = getCompletedCollection();
 
     await Promise.all([
       bookings.deleteOne({ createdAt: id }),
-      queueCol.deleteOne({ createdAt: id })
+      queueCol.deleteOne({ createdAt: id }),
+      completed.deleteOne({ createdAt: id })
     ]);
 
     res.json({ success: true });

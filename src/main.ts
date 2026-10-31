@@ -1283,6 +1283,486 @@ document.addEventListener('DOMContentLoaded', () => {
     return 50;
   };
 
+  // ── Admin Bookings State & Reactive Management ─────────────────────────
+  interface AdminBookingItem {
+    _id?: string;
+    date: string;
+    time: string;
+    name: string;
+    phone: string;
+    gender?: string;
+    service: string;
+    barber?: string;
+    slotType?: string;
+    type?: string;
+    createdAt?: string;
+    status: 'booked' | 'waitlist' | 'completed';
+  }
+
+  const adminBookingsFilterState = {
+    search: '',
+    dateFilter: 'all',
+    customDate: '',
+    barberFilter: 'all',
+    statusFilter: 'all', // 'all' | 'booked' | 'waitlist' | 'completed'
+    sortBy: 'recent',    // 'recent' | 'appt_asc' | 'appt_desc' | 'recent_asc'
+    page: 1,
+    pageSize: 10
+  };
+
+  let rawAdminBookingsData: {
+    bookedSlots: any[];
+    queue: any[];
+    completedSlots: any[];
+    role?: string;
+  } | null = null;
+
+  const formatRelativeTime = (isoString?: string): string => {
+    if (!isoString) return '—';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '—';
+    const diffMs = Date.now() - date.getTime();
+    if (diffMs < 0) return 'Just now';
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'Just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return date.toLocaleDateString('en-IN', {
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const isRecentBooking = (isoString?: string): boolean => {
+    if (!isoString) return false;
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return false;
+    const diffMs = Date.now() - date.getTime();
+    return diffMs >= 0 && diffMs <= 2 * 60 * 60 * 1000;
+  };
+
+  const formatAppointmentDate = (dateStr: string, todayStr: string, tomorrowStr: string): { label: string; isToday: boolean; isTomorrow: boolean } => {
+    if (!dateStr) return { label: '—', isToday: false, isTomorrow: false };
+    if (dateStr === todayStr) {
+      return { label: 'Today', isToday: true, isTomorrow: false };
+    }
+    if (dateStr === tomorrowStr) {
+      return { label: 'Tomorrow', isToday: false, isTomorrow: true };
+    }
+    try {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      const dayName = dateObj.toLocaleDateString('en-IN', { weekday: 'short' });
+      const formatted = dateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      return { label: `${dayName}, ${formatted}`, isToday: false, isTomorrow: false };
+    } catch {
+      return { label: dateStr, isToday: false, isTomorrow: false };
+    }
+  };
+
+  const getInitials = (name: string): string => {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  };
+
+  const getFilteredBookingsList = (): AdminBookingItem[] => {
+    if (!rawAdminBookingsData) return [];
+    const booked = (rawAdminBookingsData.bookedSlots || []).map((b: any) => ({ ...b, status: 'booked' as const }));
+    const queue = (rawAdminBookingsData.queue || []).map((b: any) => ({ ...b, status: 'waitlist' as const }));
+    const completed = (rawAdminBookingsData.completedSlots || []).map((b: any) => ({ ...b, status: 'completed' as const }));
+
+    let all: AdminBookingItem[] = [...booked, ...queue, ...completed];
+
+    // Status filter
+    if (adminBookingsFilterState.statusFilter !== 'all') {
+      all = all.filter(b => b.status === adminBookingsFilterState.statusFilter);
+    }
+
+    // Date filter
+    const today = getIndiaDateString();
+    const tomorrow = getTomorrowDateString();
+    const nextWeekDate = new Date();
+    nextWeekDate.setDate(nextWeekDate.getDate() + 7);
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const nextWeekStr = formatter.format(nextWeekDate);
+
+    if (adminBookingsFilterState.dateFilter === 'today') {
+      all = all.filter(b => b.date === today);
+    } else if (adminBookingsFilterState.dateFilter === 'tomorrow') {
+      all = all.filter(b => b.date === tomorrow);
+    } else if (adminBookingsFilterState.dateFilter === 'week') {
+      all = all.filter(b => b.date >= today && b.date <= nextWeekStr);
+    } else if (adminBookingsFilterState.dateFilter === 'custom' && adminBookingsFilterState.customDate) {
+      all = all.filter(b => b.date === adminBookingsFilterState.customDate);
+    }
+
+    // Barber filter
+    if (adminBookingsFilterState.barberFilter !== 'all') {
+      const targetBarber = adminBookingsFilterState.barberFilter.toLowerCase();
+      all = all.filter(b => {
+        const bBarber = (b.barber || 'any available').toLowerCase();
+        if (targetBarber === 'bobby') return bBarber.includes('bobby');
+        if (targetBarber === 'sumit') return bBarber.includes('sumit');
+        if (targetBarber === 'shetty') return bBarber.includes('shetty');
+        if (targetBarber === 'any') return bBarber.includes('any') || bBarber === '';
+        return bBarber.includes(targetBarber);
+      });
+    }
+
+    // Search query
+    const query = adminBookingsFilterState.search.trim().toLowerCase();
+    if (query) {
+      all = all.filter(b => {
+        const str = `${b.name || ''} ${b.phone || ''} ${b.service || ''} ${b.barber || ''} ${b.date || ''} ${b.time || ''}`.toLowerCase();
+        return str.includes(query);
+      });
+    }
+
+    // Sort order
+    if (adminBookingsFilterState.sortBy === 'recent') {
+      // Newest booked first (Default - recent on top)
+      all.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : new Date(`${a.date}T12:00:00`).getTime();
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : new Date(`${b.date}T12:00:00`).getTime();
+        return timeB - timeA;
+      });
+    } else if (adminBookingsFilterState.sortBy === 'recent_asc') {
+      // Oldest booked first
+      all.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : new Date(`${a.date}T12:00:00`).getTime();
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : new Date(`${b.date}T12:00:00`).getTime();
+        return timeA - timeB;
+      });
+    } else if (adminBookingsFilterState.sortBy === 'appt_asc') {
+      // Upcoming appointment date & time first
+      all.sort((a, b) => {
+        const cmp = a.date.localeCompare(b.date);
+        if (cmp !== 0) return cmp;
+        return a.time.localeCompare(b.time);
+      });
+    } else if (adminBookingsFilterState.sortBy === 'appt_desc') {
+      // Furthest appointment date & time first
+      all.sort((a, b) => {
+        const cmp = b.date.localeCompare(a.date);
+        if (cmp !== 0) return cmp;
+        return b.time.localeCompare(a.time);
+      });
+    }
+
+    return all;
+  };
+
+  const renderBookingsList = () => {
+    const tableWrap = document.getElementById('admin-bookings-table-wrapper');
+    const paginationWrap = document.getElementById('admin-bookings-pagination-wrapper');
+    const headerTitle = document.getElementById('admin-bookings-title');
+    const clearFiltersBtn = document.getElementById('btn-clear-filters');
+    const searchClearBtn = document.getElementById('admin-search-clear-btn');
+    const todayStr = getIndiaDateString();
+    const tomorrowStr = getTomorrowDateString();
+
+    if (!tableWrap || !paginationWrap) return;
+
+    // Toggle search clear button
+    if (searchClearBtn) {
+      if (adminBookingsFilterState.search.length > 0) {
+        searchClearBtn.classList.add('visible');
+      } else {
+        searchClearBtn.classList.remove('visible');
+      }
+    }
+
+    // Toggle clear filters button
+    const hasActiveFilters = adminBookingsFilterState.search !== '' ||
+      adminBookingsFilterState.dateFilter !== 'all' ||
+      adminBookingsFilterState.barberFilter !== 'all' ||
+      adminBookingsFilterState.statusFilter !== 'all' ||
+      adminBookingsFilterState.sortBy !== 'recent';
+
+    if (clearFiltersBtn) {
+      clearFiltersBtn.style.display = hasActiveFilters ? 'inline-flex' : 'none';
+    }
+
+    const filtered = getFilteredBookingsList();
+    const totalItems = filtered.length;
+    const pageSize = adminBookingsFilterState.pageSize;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+    // Clamp page
+    if (adminBookingsFilterState.page > totalPages) {
+      adminBookingsFilterState.page = totalPages;
+    }
+    if (adminBookingsFilterState.page < 1) {
+      adminBookingsFilterState.page = 1;
+    }
+
+    // Update section title with active count
+    if (headerTitle) {
+      let statusLabel = 'All Bookings';
+      if (adminBookingsFilterState.statusFilter === 'booked') statusLabel = 'Booked / Confirmed Slots';
+      else if (adminBookingsFilterState.statusFilter === 'waitlist') statusLabel = 'Waitlist Queue';
+      else if (adminBookingsFilterState.statusFilter === 'completed') statusLabel = 'Completed History';
+
+      headerTitle.textContent = `${statusLabel} (${totalItems})`;
+    }
+
+    // Empty state
+    if (totalItems === 0) {
+      tableWrap.innerHTML = `
+        <div class="admin-empty-state">
+          <svg class="admin-empty-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+          <h4 class="admin-empty-title">No bookings found</h4>
+          <p class="admin-empty-desc">No bookings match your current search and filter selections.</p>
+          ${hasActiveFilters ? `<button id="btn-empty-clear-filters" class="admin-btn admin-btn-secondary admin-btn-sm hover-target">Reset All Filters</button>` : ''}
+        </div>
+      `;
+      paginationWrap.innerHTML = '';
+
+      const emptyClearBtn = document.getElementById('btn-empty-clear-filters');
+      emptyClearBtn?.addEventListener('click', resetAllFilters);
+      return;
+    }
+
+    const startIdx = (adminBookingsFilterState.page - 1) * pageSize;
+    const endIdx = Math.min(startIdx + pageSize, totalItems);
+    const pageItems = filtered.slice(startIdx, endIdx);
+
+    let rowsHtml = '';
+    pageItems.forEach((b) => {
+      const initials = getInitials(b.name);
+      const apptDate = formatAppointmentDate(b.date, todayStr, tomorrowStr);
+      const price = getServicePrice(b.service);
+      const relTime = formatRelativeTime(b.createdAt);
+      const isRecent = isRecentBooking(b.createdAt);
+      const exactTimeStr = b.createdAt ? new Date(b.createdAt).toLocaleString('en-IN') : b.date;
+      const cleanPhone = (b.phone || '').replace(/\D/g, '');
+      const waMessage = `Hello ${b.name}! This is Bobby Salon. Your booking for ${b.service} on ${b.date} at ${b.time} with ${b.barber || 'our stylist'} is confirmed. See you soon!`;
+      const waLink = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMessage)}`;
+
+      // Status badge class and text
+      let badgeClass = 'admin-badge-booked';
+      let statusText = '● Confirmed';
+      if (b.status === 'waitlist') {
+        badgeClass = 'admin-badge-waitlist';
+        statusText = '● Waitlist';
+      } else if (b.status === 'completed') {
+        badgeClass = 'admin-badge-completed';
+        statusText = '● Completed';
+      }
+
+      rowsHtml += `
+        <tr class="admin-table-row">
+          <!-- Client Info -->
+          <td class="admin-td" data-label="Client">
+            <div class="admin-client-cell">
+              <div class="admin-avatar-initials">${escapeHtml(initials)}</div>
+              <div class="admin-client-info">
+                <div class="admin-client-name">
+                  <span>${escapeHtml(b.name)}</span>
+                  <span class="admin-gender-tag">${escapeHtml(b.gender || 'Male')}</span>
+                </div>
+                <div class="admin-client-links">
+                  <a href="tel:${escapeHtml(b.phone)}" class="admin-client-phone-link" title="Call client">${escapeHtml(b.phone)}</a>
+                  <a href="${waLink}" target="_blank" class="admin-wa-icon-link" title="Open WhatsApp chat">
+                    <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.2;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Appointment Details -->
+          <td class="admin-td" data-label="Appointment">
+            <div class="admin-appt-cell">
+              <div class="admin-appt-date-wrap">
+                <span>${apptDate.label}</span>
+                ${apptDate.isToday ? '<span class="admin-date-badge-today">Today</span>' : ''}
+                ${apptDate.isTomorrow ? '<span class="admin-date-badge-tomorrow">Tomorrow</span>' : ''}
+              </div>
+              <div class="admin-appt-time">
+                <svg viewBox="0 0 24 24" style="width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <strong>${escapeHtml(b.time)}</strong>
+              </div>
+            </div>
+          </td>
+
+          <!-- Service & Price -->
+          <td class="admin-td" data-label="Service">
+            <div class="admin-service-cell">
+              <div class="admin-service-name">${escapeHtml(b.service)}</div>
+              <div class="admin-price-pill">INR ${price}</div>
+            </div>
+          </td>
+
+          <!-- Barber -->
+          <td class="admin-td" data-label="Barber">
+            <span class="admin-badge admin-badge-booked" style="background: rgba(51, 75, 51, 0.08); color: var(--theme-main); border: 1px solid rgba(51, 75, 51, 0.15);">
+              ${escapeHtml(b.barber || 'Any Available')}
+            </span>
+          </td>
+
+          <!-- Status Badge -->
+          <td class="admin-td" data-label="Status">
+            <span class="admin-badge ${badgeClass}">${statusText}</span>
+          </td>
+
+          <!-- Booked At (Recent on Top Indicator) -->
+          <td class="admin-td" data-label="Booked When" title="${escapeHtml(exactTimeStr)}">
+            <div class="admin-booked-cell">
+              <div class="admin-booked-relative-wrap">
+                <span class="admin-booked-relative">${escapeHtml(relTime)}</span>
+                ${isRecent ? '<span class="admin-badge-new">NEW</span>' : ''}
+              </div>
+              <div class="admin-booked-exact">
+                ${b.createdAt ? new Date(b.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) + ' ' + new Date(b.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : escapeHtml(b.date)}
+              </div>
+            </div>
+          </td>
+
+          <!-- Actions -->
+          <td class="admin-td admin-td-actions" data-label="Actions">
+            ${b.status === 'booked' ? `
+              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-primary hover-target" data-action="complete" data-id="${escapeHtml(b.createdAt || '')}">Complete</button>
+              <a href="${waLink}" target="_blank" class="admin-btn admin-btn-sm admin-btn-secondary hover-target" style="text-decoration: none;">
+                <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; margin-right: 3px; vertical-align: middle;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Reminder
+              </a>
+              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt || '')}">Cancel</button>
+            ` : (b.status === 'waitlist' ? `
+              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-primary hover-target" data-action="approve" data-id="${escapeHtml(b.createdAt || '')}">Approve</button>
+              <a href="${waLink}" target="_blank" class="admin-btn admin-btn-sm admin-btn-secondary hover-target" style="text-decoration: none;">Message</a>
+              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt || '')}">Cancel</button>
+            ` : `
+              <span style="color: #2e8b57; font-size: 0.75rem; font-family: var(--font-mono); font-weight: 700; margin-right: 0.4rem;">Done</span>
+              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt || '')}" title="Delete record">Delete</button>
+            `)}
+          </td>
+        </tr>
+      `;
+    });
+
+    tableWrap.innerHTML = `
+      <div class="admin-table-container">
+        <table class="admin-table" id="table-bookings-unified">
+          <thead>
+            <tr>
+              <th class="admin-th">Client</th>
+              <th class="admin-th">Appointment</th>
+              <th class="admin-th">Service</th>
+              <th class="admin-th">Barber</th>
+              <th class="admin-th">Status</th>
+              <th class="admin-th">Booked At</th>
+              <th class="admin-th" style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    // Render pagination controls
+    let pageNumbersHtml = '';
+    const getPageNumbers = (curr: number, total: number): (number | '...')[] => {
+      if (total <= 6) {
+        const nums: number[] = [];
+        for (let i = 1; i <= total; i++) nums.push(i);
+        return nums;
+      }
+      const pages: (number | '...')[] = [1];
+      const start = Math.max(2, curr - 1);
+      const end = Math.min(total - 1, curr + 1);
+
+      if (start > 2) pages.push('...');
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      if (end < total - 1) pages.push('...');
+      pages.push(total);
+      return pages;
+    };
+
+    const pages = getPageNumbers(adminBookingsFilterState.page, totalPages);
+    pages.forEach(p => {
+      if (p === '...') {
+        pageNumbersHtml += `<span class="pagination-ellipsis">…</span>`;
+      } else {
+        const isActive = p === adminBookingsFilterState.page;
+        pageNumbersHtml += `
+          <button class="pagination-btn hover-target ${isActive ? 'active' : ''}" data-page="${p}">${p}</button>
+        `;
+      }
+    });
+
+    paginationWrap.innerHTML = `
+      <div class="admin-pagination-bar">
+        <div class="admin-pagination-info">
+          Showing <strong>${startIdx + 1}</strong>–<strong>${endIdx}</strong> of <strong>${totalItems}</strong> bookings
+        </div>
+        <div class="admin-pagination-controls">
+          <button class="pagination-btn hover-target" data-page="first" ${adminBookingsFilterState.page <= 1 ? 'disabled' : ''} title="First Page">«</button>
+          <button class="pagination-btn hover-target" data-page="prev" ${adminBookingsFilterState.page <= 1 ? 'disabled' : ''} title="Previous Page">‹ Prev</button>
+          ${pageNumbersHtml}
+          <button class="pagination-btn hover-target" data-page="next" ${adminBookingsFilterState.page >= totalPages ? 'disabled' : ''} title="Next Page">Next ›</button>
+          <button class="pagination-btn hover-target" data-page="last" ${adminBookingsFilterState.page >= totalPages ? 'disabled' : ''} title="Last Page">»</button>
+        </div>
+      </div>
+    `;
+  };
+
+  const resetAllFilters = () => {
+    adminBookingsFilterState.search = '';
+    adminBookingsFilterState.dateFilter = 'all';
+    adminBookingsFilterState.customDate = '';
+    adminBookingsFilterState.barberFilter = 'all';
+    adminBookingsFilterState.statusFilter = 'all';
+    adminBookingsFilterState.sortBy = 'recent';
+    adminBookingsFilterState.page = 1;
+
+    // Sync UI elements
+    const searchInput = document.getElementById('admin-search') as HTMLInputElement;
+    const dateSelect = document.getElementById('filter-date') as HTMLSelectElement;
+    const customDateInput = document.getElementById('filter-custom-date') as HTMLInputElement;
+    const barberSelect = document.getElementById('filter-barber') as HTMLSelectElement;
+    const sortSelect = document.getElementById('filter-sort') as HTMLSelectElement;
+
+    if (searchInput) searchInput.value = '';
+    if (dateSelect) dateSelect.value = 'all';
+    if (customDateInput) {
+      customDateInput.value = '';
+      customDateInput.style.display = 'none';
+    }
+    if (barberSelect) barberSelect.value = 'all';
+    if (sortSelect) sortSelect.value = 'recent';
+
+    // Reset status tabs
+    document.querySelectorAll('.admin-status-tab').forEach(t => {
+      if ((t as HTMLElement).dataset.status === 'all') {
+        t.classList.add('active');
+      } else {
+        t.classList.remove('active');
+      }
+    });
+
+    renderBookingsList();
+  };
+
   async function fetchAdminData() {
     try {
       const res = await authFetch('/api/admin/bookings');
@@ -1297,7 +1777,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!data || !Array.isArray(data.bookedSlots)) return;
       adminRole = data.role || 'staff';
       sessionStorage.setItem('adminRole', adminRole);
-      
+      rawAdminBookingsData = data;
+
       const todayStr = getIndiaDateString();
       const bookedSlots = data.bookedSlots || [];
       const completedSlots = data.completedSlots || [];
@@ -1305,313 +1786,272 @@ document.addEventListener('DOMContentLoaded', () => {
       const totalToday = bookedSlots.filter((b: any) => b.date === todayStr).length;
       const totalWaitlist = queueSlots.length;
       const totalCompleted = completedSlots.length;
+      const totalBooked = bookedSlots.length;
+      const totalAll = totalBooked + totalWaitlist + totalCompleted;
       const estimatedRevenue = completedSlots.reduce((sum: number, b: any) => sum + getServicePrice(b.service), 0);
 
-      // Preserve filter values before re-rendering
-      const searchInputOld = document.getElementById('admin-search') as HTMLInputElement;
-      const currentSearch = searchInputOld ? searchInputOld.value : '';
-      const isFocused = searchInputOld && document.activeElement === searchInputOld;
-
-      const dateFilterOld = document.getElementById('filter-date') as HTMLSelectElement;
-      const currentDateFilter = dateFilterOld ? dateFilterOld.value : 'all';
-
-      const barberFilterOld = document.getElementById('filter-barber') as HTMLSelectElement;
-      const currentBarberFilter = barberFilterOld ? barberFilterOld.value : 'all';
-
-      const statusFilterOld = document.getElementById('filter-status') as HTMLSelectElement;
-      const currentStatusFilter = statusFilterOld ? statusFilterOld.value : 'all';
-
-      let html = `
-        <div class="admin-stats-grid">
-          <div class="admin-glass-panel admin-stat-card">
-            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Today's Bookings</h3>
-            <p class="admin-stat-value" style="color: var(--theme-main);">${totalToday}</p>
-          </div>
-          <div class="admin-glass-panel admin-stat-card">
-            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Waitlist Queue</h3>
-            <p class="admin-stat-value" style="color: #4682B4;">${totalWaitlist}</p>
-          </div>
-          <div class="admin-glass-panel admin-stat-card">
-            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Total Completed</h3>
-            <p class="admin-stat-value" style="color: #2E8B57;">${totalCompleted}</p>
-          </div>
-          <div class="admin-glass-panel admin-stat-card">
-            <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Estimated Earnings</h3>
-            <p class="admin-stat-value" style="color: #FF8C00;">INR ${estimatedRevenue}</p>
-          </div>
-        </div>
-
-        <div class="admin-actions-toolbar">
-          <button id="toggle-manual-booking-btn" class="admin-btn admin-btn-primary hover-target">+ Add Manual Booking</button>
-          <button id="export-bookings-csv-btn" class="admin-btn admin-btn-secondary hover-target">Export CSV</button>
-        </div>
-        
-        <!-- Search Bar with wrapper -->
-        <div class="admin-search-wrapper">
-          <svg class="admin-search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" id="admin-search" class="admin-search-input" placeholder="Search client name, phone, service or barber...">
-        </div>
-        
-        <!-- Advanced Filters Bar -->
-        <div class="admin-filters-bar">
-          <select id="filter-date" class="admin-filter-select hover-target">
-            <option value="all">All Dates</option>
-            <option value="today">Today</option>
-            <option value="tomorrow">Tomorrow</option>
-            <option value="week">Next 7 Days</option>
-          </select>
-          <select id="filter-barber" class="admin-filter-select hover-target">
-            <option value="all">All Barbers</option>
-            <option value="bobby">Bobby</option>
-            <option value="sumit">Sumit</option>
-            <option value="shetty Bhai">Shetty Bhai</option>
-          </select>
-          <select id="filter-status" class="admin-filter-select hover-target">
-            <option value="all">All Statuses</option>
-            <option value="booked">Booked Slots</option>
-            <option value="waitlist">Waitlist Queue</option>
-            <option value="completed">Completed History</option>
-          </select>
-        </div>
-      `;
-
-      // Booked slots table
-      html += `
-        <div id="wrap-bookings" class="admin-glass-panel" style="margin-bottom: 2rem;">
-          <h2 id="hdr-bookings" style="margin-top: 0; color: var(--theme-main); font-family: var(--font-serif); font-size: 2rem; margin-bottom: 1rem;">Booked Slots</h2>
-          <div class="admin-table-container">
-            <table class="admin-table" id="table-bookings">
-              <thead>
-                <tr>
-                  <th class="admin-th">Date</th>
-                  <th class="admin-th">Time</th>
-                  <th class="admin-th">Name</th>
-                  <th class="admin-th">Phone</th>
-                  <th class="admin-th">Service</th>
-                  <th class="admin-th">Barber</th>
-                  <th class="admin-th">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-      `;
-      data.bookedSlots.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime() || a.time.localeCompare(b.time));
-      data.bookedSlots.forEach((b: any) => {
-        const deleteBtn = `<button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}">Cancel</button>`;
-        const waLink = `https://wa.me/${b.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${b.name}! This is Bobby Salon. Your booking for ${b.service} on ${b.date} at ${b.time} with ${b.barber} is confirmed. See you soon!`)}`;
-        
-        html += `
-          <tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)} ${escapeHtml(b.service.toLowerCase())} ${escapeHtml((b.barber || '').toLowerCase())}" data-date="${escapeHtml(b.date)}" data-barber="${escapeHtml(b.barber || 'Any Available')}" data-status="booked">
-            <td class="admin-td" data-label="Date">${escapeHtml(b.date)}</td>
-            <td class="admin-td" data-label="Time"><strong>${escapeHtml(b.time)}</strong></td>
-            <td class="admin-td" data-label="Client">${escapeHtml(b.name)}</td>
-            <td class="admin-td" data-label="Phone"><a href="tel:${escapeHtml(b.phone)}" style="color:inherit;text-decoration:none;">${escapeHtml(b.phone)}</a></td>
-            <td class="admin-td" data-label="Service">${escapeHtml(b.service)}</td>
-            <td class="admin-td" data-label="Barber"><span class="admin-badge admin-badge-booked">${escapeHtml(b.barber || 'N/A')}</span></td>
-            <td class="admin-td admin-td-actions" data-label="Actions">
-              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-primary hover-target" data-action="complete" data-id="${escapeHtml(b.createdAt)}">Complete</button>
-              <a href="${waLink}" target="_blank" class="admin-btn admin-btn-sm admin-btn-secondary hover-target" style="text-decoration: none;">
-                <svg viewBox="0 0 24 24" style="width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; margin-right: 3px; vertical-align: middle;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Reminder
-              </a>
-              ${deleteBtn}
-            </td>
-          </tr>
-        `;
-      });
-      if (data.bookedSlots.length === 0) {
-        html += `<tr><td colspan="7" class="admin-td" style="text-align: center; color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.8rem; padding: 2rem 0;">No booked slots found.</td></tr>`;
-      }
-      html += '</tbody></table></div></div>';
-
-      // Waitlist Queue table
-      html += `
-        <div id="wrap-queue" class="admin-glass-panel" style="margin-bottom: 2rem;">
-          <h2 id="hdr-queue" style="color: var(--theme-main); font-family: var(--font-serif); font-size: 2rem; margin-bottom: 1rem;">Waitlist Queue</h2>
-          <div class="admin-table-container">
-            <table class="admin-table" id="table-queue">
-              <thead>
-                <tr>
-                  <th class="admin-th">Date</th>
-                  <th class="admin-th">Time</th>
-                  <th class="admin-th">Name</th>
-                  <th class="admin-th">Phone</th>
-                  <th class="admin-th">Service</th>
-                  <th class="admin-th">Barber</th>
-                  <th class="admin-th">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-      `;
-      data.queue.forEach((b: any) => {
-        const deleteBtn = `<button class="admin-action-btn admin-btn admin-btn-sm admin-btn-danger hover-target" data-action="delete" data-id="${escapeHtml(b.createdAt)}">Cancel</button>`;
-        html += `
-          <tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)} ${escapeHtml(b.service.toLowerCase())} ${escapeHtml((b.barber || '').toLowerCase())}" data-date="${escapeHtml(b.date)}" data-barber="${escapeHtml(b.barber || 'Any Available')}" data-status="waitlist">
-            <td class="admin-td" data-label="Date">${escapeHtml(b.date)}</td>
-            <td class="admin-td" data-label="Time"><strong>${escapeHtml(b.time)}</strong></td>
-            <td class="admin-td" data-label="Client">${escapeHtml(b.name)}</td>
-            <td class="admin-td" data-label="Phone"><a href="tel:${escapeHtml(b.phone)}" style="color:inherit;text-decoration:none;">${escapeHtml(b.phone)}</a></td>
-            <td class="admin-td" data-label="Service">${escapeHtml(b.service)}</td>
-            <td class="admin-td" data-label="Barber"><span class="admin-badge admin-badge-waitlist">${escapeHtml(b.barber || 'N/A')}</span></td>
-            <td class="admin-td admin-td-actions" data-label="Actions">
-              <button class="admin-action-btn admin-btn admin-btn-sm admin-btn-primary hover-target" data-action="approve" data-id="${escapeHtml(b.createdAt)}">Approve</button>
-              ${deleteBtn}
-            </td>
-          </tr>
-        `;
-      });
-      if (data.queue.length === 0) {
-        html += `<tr><td colspan="7" class="admin-td" style="text-align: center; color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.8rem; padding: 2rem 0;">No waitlisted clients.</td></tr>`;
-      }
-      html += '</tbody></table></div></div>';
-
-      // Completed History table
-      html += `
-        <div id="wrap-completed" class="admin-glass-panel">
-          <h2 id="hdr-completed" style="color: var(--text-secondary); font-family: var(--font-serif); font-size: 2rem; margin-bottom: 1rem;">Completed History</h2>
-          <div class="admin-table-container" style="opacity: 0.85;">
-            <table class="admin-table" id="table-completed">
-              <thead>
-                <tr>
-                  <th class="admin-th">Date</th>
-                  <th class="admin-th">Time</th>
-                  <th class="admin-th">Name</th>
-                  <th class="admin-th">Phone</th>
-                  <th class="admin-th">Service</th>
-                  <th class="admin-th">Barber</th>
-                </tr>
-              </thead>
-              <tbody>
-      `;
-      data.completedSlots.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime() || a.time.localeCompare(b.time));
-      data.completedSlots.forEach((b: any) => {
-        html += `
-          <tr class="admin-table-row" data-search="${escapeHtml(b.name.toLowerCase())} ${escapeHtml(b.phone)} ${escapeHtml(b.service.toLowerCase())} ${escapeHtml((b.barber || '').toLowerCase())}" data-date="${escapeHtml(b.date)}" data-barber="${escapeHtml(b.barber || 'Any Available')}" data-status="completed">
-            <td class="admin-td" data-label="Date">${escapeHtml(b.date)}</td>
-            <td class="admin-td" data-label="Time"><strong>${escapeHtml(b.time)}</strong></td>
-            <td class="admin-td" data-label="Client">${escapeHtml(b.name)}</td>
-            <td class="admin-td" data-label="Phone">${escapeHtml(b.phone)}</td>
-            <td class="admin-td" data-label="Service">${escapeHtml(b.service)}</td>
-            <td class="admin-td" data-label="Barber"><span class="admin-badge admin-badge-completed">${escapeHtml(b.barber || 'N/A')}</span></td>
-          </tr>
-        `;
-      });
-      if (data.completedSlots.length === 0) {
-        html += `<tr><td colspan="6" class="admin-td" style="text-align: center; color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.8rem; padding: 2rem 0;">No completed history yet.</td></tr>`;
-      }
-      html += '</tbody></table></div></div>';
-
       const adminContentDiv = document.getElementById('admin-content');
-      if (adminContentDiv) {
-        adminContentDiv.innerHTML = html;
-        
-        // Restore filter values in DOM
+      if (!adminContentDiv) return;
+
+      const existingShell = document.getElementById('admin-bookings-shell');
+
+      if (!existingShell) {
+        // Build the complete interactive bookings shell
+        adminContentDiv.innerHTML = `
+          <div id="admin-bookings-shell">
+            <!-- 4 Top KPI Stat Cards -->
+            <div class="admin-stats-grid">
+              <div class="admin-glass-panel admin-stat-card">
+                <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Today's Bookings</h3>
+                <p id="stat-today-bookings" class="admin-stat-value" style="color: var(--theme-main);">${totalToday}</p>
+              </div>
+              <div class="admin-glass-panel admin-stat-card">
+                <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Waitlist Queue</h3>
+                <p id="stat-waitlist-queue" class="admin-stat-value" style="color: #4682B4;">${totalWaitlist}</p>
+              </div>
+              <div class="admin-glass-panel admin-stat-card">
+                <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Total Completed</h3>
+                <p id="stat-total-completed" class="admin-stat-value" style="color: #2E8B57;">${totalCompleted}</p>
+              </div>
+              <div class="admin-glass-panel admin-stat-card">
+                <h3 style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; margin-bottom: 0.5rem;">Estimated Earnings</h3>
+                <p id="stat-estimated-earnings" class="admin-stat-value" style="color: #FF8C00;">INR ${estimatedRevenue}</p>
+              </div>
+            </div>
+
+            <!-- Toolbar: Manual booking & Export CSV -->
+            <div class="admin-actions-toolbar">
+              <button id="toggle-manual-booking-btn" class="admin-btn admin-btn-primary hover-target">+ Add Manual Booking</button>
+              <button id="export-bookings-csv-btn" class="admin-btn admin-btn-secondary hover-target">Export CSV</button>
+            </div>
+
+            <!-- Status Segmented Filter Pills -->
+            <div class="admin-status-tabs">
+              <button type="button" class="admin-status-tab ${adminBookingsFilterState.statusFilter === 'all' ? 'active' : ''} hover-target" data-status="all">
+                <span class="admin-status-dot all"></span>
+                <span>All Bookings</span>
+                <span id="count-status-all" class="admin-tab-count">${totalAll}</span>
+              </button>
+              <button type="button" class="admin-status-tab ${adminBookingsFilterState.statusFilter === 'booked' ? 'active' : ''} hover-target" data-status="booked">
+                <span class="admin-status-dot booked"></span>
+                <span>Confirmed</span>
+                <span id="count-status-booked" class="admin-tab-count">${totalBooked}</span>
+              </button>
+              <button type="button" class="admin-status-tab ${adminBookingsFilterState.statusFilter === 'waitlist' ? 'active' : ''} hover-target" data-status="waitlist">
+                <span class="admin-status-dot waitlist"></span>
+                <span>Waitlist Queue</span>
+                <span id="count-status-waitlist" class="admin-tab-count">${totalWaitlist}</span>
+              </button>
+              <button type="button" class="admin-status-tab ${adminBookingsFilterState.statusFilter === 'completed' ? 'active' : ''} hover-target" data-status="completed">
+                <span class="admin-status-dot completed"></span>
+                <span>Completed</span>
+                <span id="count-status-completed" class="admin-tab-count">${totalCompleted}</span>
+              </button>
+            </div>
+
+            <!-- Search Input with Clear Button -->
+            <div class="admin-search-wrapper">
+              <svg class="admin-search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="admin-search" class="admin-search-input" placeholder="Search client name, phone, service, barber, date or time..." value="${escapeHtml(adminBookingsFilterState.search)}">
+              <button type="button" id="admin-search-clear-btn" class="admin-search-clear-btn hover-target" title="Clear search">&times;</button>
+            </div>
+
+            <!-- Filters & Sorting Bar -->
+            <div class="admin-filters-controls-wrap">
+              <!-- Date Filter -->
+              <div class="admin-filter-item">
+                <label for="filter-date">Date:</label>
+                <select id="filter-date" class="admin-filter-select hover-target">
+                  <option value="all" ${adminBookingsFilterState.dateFilter === 'all' ? 'selected' : ''}>All Dates</option>
+                  <option value="today" ${adminBookingsFilterState.dateFilter === 'today' ? 'selected' : ''}>Today</option>
+                  <option value="tomorrow" ${adminBookingsFilterState.dateFilter === 'tomorrow' ? 'selected' : ''}>Tomorrow</option>
+                  <option value="week" ${adminBookingsFilterState.dateFilter === 'week' ? 'selected' : ''}>Next 7 Days</option>
+                  <option value="custom" ${adminBookingsFilterState.dateFilter === 'custom' ? 'selected' : ''}>Specific Date...</option>
+                </select>
+                <input type="date" id="filter-custom-date" class="admin-filter-select" style="display: ${adminBookingsFilterState.dateFilter === 'custom' ? 'block' : 'none'};" value="${escapeHtml(adminBookingsFilterState.customDate)}">
+              </div>
+
+              <!-- Barber Filter -->
+              <div class="admin-filter-item">
+                <label for="filter-barber">Barber:</label>
+                <select id="filter-barber" class="admin-filter-select hover-target">
+                  <option value="all" ${adminBookingsFilterState.barberFilter === 'all' ? 'selected' : ''}>All Barbers</option>
+                  <option value="bobby" ${adminBookingsFilterState.barberFilter === 'bobby' ? 'selected' : ''}>Bobby</option>
+                  <option value="sumit" ${adminBookingsFilterState.barberFilter === 'sumit' ? 'selected' : ''}>Sumit</option>
+                  <option value="shetty" ${adminBookingsFilterState.barberFilter === 'shetty' ? 'selected' : ''}>Shetty Bhai</option>
+                  <option value="any" ${adminBookingsFilterState.barberFilter === 'any' ? 'selected' : ''}>Any Available</option>
+                </select>
+              </div>
+
+              <!-- Sort Filter: Default to Recent Bookings on Top -->
+              <div class="admin-filter-item">
+                <label for="filter-sort">Sort:</label>
+                <select id="filter-sort" class="admin-filter-select hover-target">
+                  <option value="recent" ${adminBookingsFilterState.sortBy === 'recent' ? 'selected' : ''}>🕒 Newest Booked First</option>
+                  <option value="appt_asc" ${adminBookingsFilterState.sortBy === 'appt_asc' ? 'selected' : ''}>📅 Upcoming Appointment</option>
+                  <option value="appt_desc" ${adminBookingsFilterState.sortBy === 'appt_desc' ? 'selected' : ''}>📆 Furthest Appointment</option>
+                  <option value="recent_asc" ${adminBookingsFilterState.sortBy === 'recent_asc' ? 'selected' : ''}>⏳ Oldest Booked First</option>
+                </select>
+              </div>
+
+              <!-- Page Size Filter -->
+              <div class="admin-filter-item">
+                <label for="filter-page-size">Show:</label>
+                <select id="filter-page-size" class="admin-filter-select hover-target">
+                  <option value="10" ${adminBookingsFilterState.pageSize === 10 ? 'selected' : ''}>10 / page</option>
+                  <option value="25" ${adminBookingsFilterState.pageSize === 25 ? 'selected' : ''}>25 / page</option>
+                  <option value="50" ${adminBookingsFilterState.pageSize === 50 ? 'selected' : ''}>50 / page</option>
+                </select>
+              </div>
+
+              <!-- Clear Filters Button -->
+              <button type="button" id="btn-clear-filters" class="admin-clear-filters-btn hover-target" style="display: none;">
+                <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <span>Reset Filters</span>
+              </button>
+            </div>
+
+            <!-- Main Bookings Panel -->
+            <div id="admin-bookings-main-card" class="admin-glass-panel">
+              <h2 id="admin-bookings-title" style="margin-top: 0; color: var(--theme-main); font-family: var(--font-serif); font-size: 1.75rem; margin-bottom: 1rem;">
+                All Bookings (${totalAll})
+              </h2>
+
+              <!-- Dynamic Table Wrapper -->
+              <div id="admin-bookings-table-wrapper">
+                <div class="spinner"></div>
+              </div>
+
+              <!-- Dynamic Pagination Wrapper -->
+              <div id="admin-bookings-pagination-wrapper"></div>
+            </div>
+          </div>
+        `;
+
+        // Attach Search input listeners
         const searchInput = document.getElementById('admin-search') as HTMLInputElement;
-        const dateSelect = document.getElementById('filter-date') as HTMLSelectElement;
-        const barberSelect = document.getElementById('filter-barber') as HTMLSelectElement;
-        const statusSelect = document.getElementById('filter-status') as HTMLSelectElement;
-
-        if (searchInput) {
-          searchInput.value = currentSearch;
-          if (isFocused) searchInput.focus();
-        }
-        if (dateSelect) dateSelect.value = currentDateFilter;
-        if (barberSelect) barberSelect.value = currentBarberFilter;
-        if (statusSelect) statusSelect.value = currentStatusFilter;
-
-        // Apply filters function
-        const applyFilters = () => {
-          const query = searchInput ? searchInput.value.toLowerCase() : '';
-          const dateVal = dateSelect ? dateSelect.value : 'all';
-          const barberVal = barberSelect ? barberSelect.value : 'all';
-          const statusVal = statusSelect ? statusSelect.value : 'all';
-
-          const today = getIndiaDateString();
-          const tomorrow = getTomorrowDateString();
-          const nextWeekDate = new Date();
-          nextWeekDate.setDate(nextWeekDate.getDate() + 7);
-          const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-          });
-          const nextWeekStr = formatter.format(nextWeekDate);
-
-          document.querySelectorAll('.admin-table-row').forEach(row => {
-            const el = row as HTMLElement;
-            const rSearch = el.dataset.search || '';
-            const rDate = el.dataset.date || '';
-            const rBarber = el.dataset.barber || '';
-            const rStatus = el.dataset.status || '';
-
-            const matchSearch = !query || rSearch.includes(query);
-            
-            let matchDate = true;
-            if (dateVal === 'today') {
-              matchDate = rDate === today;
-            } else if (dateVal === 'tomorrow') {
-              matchDate = rDate === tomorrow;
-            } else if (dateVal === 'week') {
-              matchDate = rDate >= today && rDate <= nextWeekStr;
-            }
-
-            let matchBarber = true;
-            if (barberVal !== 'all') {
-              matchBarber = rBarber.toLowerCase() === barberVal.toLowerCase() ||
-                            (barberVal.toLowerCase() === 'shetty bhai' && rBarber.toLowerCase().includes('shetty'));
-            }
-
-            let matchStatus = true;
-            if (statusVal !== 'all') {
-              matchStatus = rStatus === statusVal;
-            }
-
-            const visible = matchSearch && matchDate && matchBarber && matchStatus;
-            el.style.display = visible ? '' : 'none';
-          });
-
-          // Toggle section wrappers
-          const updateSection = (containerId: string, statusType: string) => {
-            const wrap = document.getElementById(containerId);
-            if (!wrap) return;
-
-            if (statusVal !== 'all' && statusVal !== statusType) {
-              wrap.style.display = 'none';
-              return;
-            }
-
-            const visibleRows = wrap.querySelectorAll('.admin-table-row:not([style*="display: none"])');
-            wrap.style.display = visibleRows.length > 0 ? 'block' : 'none';
-          };
-
-          updateSection('wrap-bookings', 'booked');
-          updateSection('wrap-queue', 'waitlist');
-          updateSection('wrap-completed', 'completed');
-        };
-
-        // Attach listeners
-        [searchInput, dateSelect, barberSelect, statusSelect].forEach(el => {
-          el?.addEventListener('input', applyFilters);
-          el?.addEventListener('change', applyFilters);
+        const searchClearBtn = document.getElementById('admin-search-clear-btn');
+        searchInput?.addEventListener('input', () => {
+          adminBookingsFilterState.search = searchInput.value;
+          adminBookingsFilterState.page = 1;
+          renderBookingsList();
         });
 
-        // Run initially to apply any preserved filters
-        applyFilters();
+        searchClearBtn?.addEventListener('click', () => {
+          adminBookingsFilterState.search = '';
+          searchInput.value = '';
+          adminBookingsFilterState.page = 1;
+          renderBookingsList();
+          searchInput.focus();
+        });
 
-        // Bind CSV Exporter
+        // Attach Status tab listeners
+        document.querySelectorAll('.admin-status-tab').forEach(tab => {
+          tab.addEventListener('click', () => {
+            const status = (tab as HTMLElement).dataset.status || 'all';
+            adminBookingsFilterState.statusFilter = status;
+            adminBookingsFilterState.page = 1;
+            document.querySelectorAll('.admin-status-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            renderBookingsList();
+          });
+        });
+
+        // Attach Date filter listener
+        const dateSelect = document.getElementById('filter-date') as HTMLSelectElement;
+        const customDateInput = document.getElementById('filter-custom-date') as HTMLInputElement;
+        dateSelect?.addEventListener('change', () => {
+          adminBookingsFilterState.dateFilter = dateSelect.value;
+          if (dateSelect.value === 'custom') {
+            customDateInput.style.display = 'block';
+            customDateInput.focus();
+          } else {
+            customDateInput.style.display = 'none';
+            adminBookingsFilterState.customDate = '';
+          }
+          adminBookingsFilterState.page = 1;
+          renderBookingsList();
+        });
+
+        customDateInput?.addEventListener('change', () => {
+          adminBookingsFilterState.customDate = customDateInput.value;
+          adminBookingsFilterState.page = 1;
+          renderBookingsList();
+        });
+
+        // Attach Barber filter listener
+        const barberSelect = document.getElementById('filter-barber') as HTMLSelectElement;
+        barberSelect?.addEventListener('change', () => {
+          adminBookingsFilterState.barberFilter = barberSelect.value;
+          adminBookingsFilterState.page = 1;
+          renderBookingsList();
+        });
+
+        // Attach Sort filter listener
+        const sortSelect = document.getElementById('filter-sort') as HTMLSelectElement;
+        sortSelect?.addEventListener('change', () => {
+          adminBookingsFilterState.sortBy = sortSelect.value;
+          renderBookingsList();
+        });
+
+        // Attach Page size filter listener
+        const pageSizeSelect = document.getElementById('filter-page-size') as HTMLSelectElement;
+        pageSizeSelect?.addEventListener('change', () => {
+          adminBookingsFilterState.pageSize = parseInt(pageSizeSelect.value, 10) || 10;
+          adminBookingsFilterState.page = 1;
+          renderBookingsList();
+        });
+
+        // Attach Reset Filters button listener
+        const clearFiltersBtn = document.getElementById('btn-clear-filters');
+        clearFiltersBtn?.addEventListener('click', resetAllFilters);
+
+        // Attach Pagination delegation listener
+        const paginationWrap = document.getElementById('admin-bookings-pagination-wrapper');
+        paginationWrap?.addEventListener('click', (e) => {
+          const btn = (e.target as HTMLElement).closest('.pagination-btn') as HTMLElement;
+          if (!btn || btn.hasAttribute('disabled')) return;
+          const action = btn.dataset.page;
+          if (!action) return;
+
+          const filtered = getFilteredBookingsList();
+          const totalPages = Math.max(1, Math.ceil(filtered.length / adminBookingsFilterState.pageSize));
+
+          if (action === 'first') {
+            adminBookingsFilterState.page = 1;
+          } else if (action === 'prev') {
+            adminBookingsFilterState.page = Math.max(1, adminBookingsFilterState.page - 1);
+          } else if (action === 'next') {
+            adminBookingsFilterState.page = Math.min(totalPages, adminBookingsFilterState.page + 1);
+          } else if (action === 'last') {
+            adminBookingsFilterState.page = totalPages;
+          } else {
+            const p = parseInt(action, 10);
+            if (!isNaN(p)) adminBookingsFilterState.page = p;
+          }
+          renderBookingsList();
+          const mainCard = document.getElementById('admin-bookings-main-card');
+          if (mainCard) {
+            mainCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        });
+
+        // Attach CSV export listener
         const exportBtn = document.getElementById('export-bookings-csv-btn');
         exportBtn?.addEventListener('click', () => {
-          const headers = ['Date', 'Time', 'Name', 'Phone', 'Service', 'Barber', 'Status'];
-          const rows: any[] = [];
-          
-          data.bookedSlots.forEach((b: any) => {
-            rows.push([b.date, b.time, b.name, b.phone, b.service, b.barber || 'N/A', 'Booked']);
-          });
-          data.queue.forEach((b: any) => {
-            rows.push([b.date, b.time, b.name, b.phone, b.service, b.barber || 'N/A', 'Waitlist']);
-          });
-          data.completedSlots.forEach((b: any) => {
-            rows.push([b.date, b.time, b.name, b.phone, b.service, b.barber || 'N/A', 'Completed']);
-          });
+          const headers = ['Date', 'Time', 'Client Name', 'Phone', 'Gender', 'Service', 'Barber', 'Status', 'Booked At'];
+          const itemsToExport = getFilteredBookingsList();
+          const rows = itemsToExport.map(b => [
+            b.date,
+            b.time,
+            b.name,
+            b.phone,
+            b.gender || 'N/A',
+            b.service,
+            b.barber || 'N/A',
+            b.status.toUpperCase(),
+            b.createdAt ? new Date(b.createdAt).toLocaleString('en-IN') : 'N/A'
+          ]);
 
           const csvContent = "data:text/csv;charset=utf-8," 
             + [headers.join(','), ...rows.map(r => r.map((val: any) => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
@@ -1623,9 +2063,35 @@ document.addEventListener('DOMContentLoaded', () => {
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-          showToast('CSV export successful!', 'success');
+          showToast(`Exported ${itemsToExport.length} bookings to CSV!`, 'success');
         });
+
+      } else {
+        // Update stats and counts in place without interrupting user interaction
+        const statToday = document.getElementById('stat-today-bookings');
+        const statWaitlist = document.getElementById('stat-waitlist-queue');
+        const statCompleted = document.getElementById('stat-total-completed');
+        const statRevenue = document.getElementById('stat-estimated-earnings');
+
+        if (statToday) statToday.textContent = String(totalToday);
+        if (statWaitlist) statWaitlist.textContent = String(totalWaitlist);
+        if (statCompleted) statCompleted.textContent = String(totalCompleted);
+        if (statRevenue) statRevenue.textContent = `INR ${estimatedRevenue}`;
+
+        const countAll = document.getElementById('count-status-all');
+        const countBooked = document.getElementById('count-status-booked');
+        const countWaitlist = document.getElementById('count-status-waitlist');
+        const countCompleted = document.getElementById('count-status-completed');
+
+        if (countAll) countAll.textContent = String(totalAll);
+        if (countBooked) countBooked.textContent = String(totalBooked);
+        if (countWaitlist) countWaitlist.textContent = String(totalWaitlist);
+        if (countCompleted) countCompleted.textContent = String(totalCompleted);
       }
+
+      // Render the filtered, sorted, and paginated bookings table
+      renderBookingsList();
+
     } catch {
       const adminContentDiv = document.getElementById('admin-content');
       if (adminContentDiv) adminContentDiv.innerHTML = '<p style="color:red; font-family: var(--font-mono);">Error loading data</p>';
