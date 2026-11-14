@@ -414,6 +414,24 @@ function isValidDateString(dateStr) {
   );
 }
 
+function isBarberOnLeave(barberName, targetDate, leavesList) {
+  if (!leavesList || !Array.isArray(leavesList)) return false;
+  const bLower = (barberName || '').toLowerCase().trim();
+  return leavesList.some(leave => {
+    const lBarber = (leave.barber || '').toLowerCase().trim();
+    const matchBarber = (bLower === lBarber) ||
+      (bLower.includes('shetty') && lBarber.includes('shetty')) ||
+      (bLower.includes('bobby') && lBarber.includes('bobby')) ||
+      (bLower.includes('sumit') && lBarber.includes('sumit'));
+    if (!matchBarber) return false;
+
+    if (leave.endDate) {
+      return targetDate >= leave.date && targetDate <= leave.endDate;
+    }
+    return leave.date === targetDate;
+  });
+}
+
 function getIndiaDateString() {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
@@ -712,10 +730,23 @@ app.get('/api/slots', async (req, res) => {
     const settings = getSettingsCollection();
     const servicesCol = getServicesCollection();
 
-    const blockedDoc = await settings.findOne({ _id: 'blocked_dates' });
+    const [blockedDoc, leavesDoc] = await Promise.all([
+      settings.findOne({ _id: 'blocked_dates' }),
+      settings.findOne({ _id: 'barber_leaves' })
+    ]);
     if (blockedDoc && blockedDoc.dates && blockedDoc.dates.includes(date)) {
       return res.json({ date, slots: [], closed: true, message: 'Salon is closed on this date (Holiday/Weekly Off)' });
     }
+
+    const barberLeaves = leavesDoc ? (leavesDoc.leaves || []) : [];
+    const bobbyOnLeave = isBarberOnLeave('Bobby', date, barberLeaves);
+    const sumitOnLeave = isBarberOnLeave('Sumit', date, barberLeaves);
+    const shettyOnLeave = isBarberOnLeave('shetty Bhai', date, barberLeaves);
+
+    const unavailableBarbers = [];
+    if (bobbyOnLeave) unavailableBarbers.push('Bobby');
+    if (sumitOnLeave) unavailableBarbers.push('Sumit');
+    if (shettyOnLeave) unavailableBarbers.push('shetty Bhai');
 
     const bookedForDate = await bookings.find({ date }).toArray();
     const servicesList = await servicesCol.find({}).toArray();
@@ -769,37 +800,38 @@ app.get('/api/slots', async (req, res) => {
 
       const slotBookings = bookedForDate.filter(b => b.time === slotDef.displayTime);
 
-      // Capacity per slot: 1 customer per barber (30 min window) → max 3 total (Bobby + Sumit + shetty Bhai)
+      // Capacity: 1 customer per available barber (30 min window)
       const perBarberMax = 1;
-      const maxBookings  = perBarberMax * 3; // Bobby + Sumit + shetty Bhai
+      const availableBarbersCount = (!bobbyOnLeave ? 1 : 0) + (!sumitOnLeave ? 1 : 0) + (!shettyOnLeave ? 1 : 0);
+      const maxBookings = perBarberMax * availableBarbersCount;
 
       const bobbyBookings = slotBookings.filter(b => b.barber === 'Bobby');
       const sumitBookings = slotBookings.filter(b => b.barber === 'Sumit');
       const shettyBookings = slotBookings.filter(b => b.barber === 'shetty Bhai');
       const anyBookings   = slotBookings.filter(b => b.barber === 'Any Available');
 
-      // "Any Available" bookings fill Bobby first, then Sumit, then shetty Bhai
+      // "Any Available" bookings fill active barbers who are not on leave
       let remainingAny = anyBookings.length;
 
-      const bobbyNeeded = Math.max(0, perBarberMax - bobbyBookings.length);
+      const bobbyNeeded = bobbyOnLeave ? 0 : Math.max(0, perBarberMax - bobbyBookings.length);
       const bobbyFromAny = Math.min(remainingAny, bobbyNeeded);
       const effectiveBobbyCount = bobbyBookings.length + bobbyFromAny;
       remainingAny -= bobbyFromAny;
 
-      const sumitNeeded = Math.max(0, perBarberMax - sumitBookings.length);
+      const sumitNeeded = sumitOnLeave ? 0 : Math.max(0, perBarberMax - sumitBookings.length);
       const sumitFromAny = Math.min(remainingAny, sumitNeeded);
       const effectiveSumitCount = sumitBookings.length + sumitFromAny;
       remainingAny -= sumitFromAny;
 
-      const shettyNeeded = Math.max(0, perBarberMax - shettyBookings.length);
+      const shettyNeeded = shettyOnLeave ? 0 : Math.max(0, perBarberMax - shettyBookings.length);
       const shettyFromAny = Math.min(remainingAny, shettyNeeded);
       const effectiveShettyCount = shettyBookings.length + shettyFromAny;
       remainingAny -= shettyFromAny;
 
-      const bobbyFull = effectiveBobbyCount >= perBarberMax;
-      const sumitFull = effectiveSumitCount >= perBarberMax;
-      const shettyFull = effectiveShettyCount >= perBarberMax;
-      const isFull    = bobbyFull && sumitFull && shettyFull;
+      const bobbyFull = bobbyOnLeave || effectiveBobbyCount >= perBarberMax;
+      const sumitFull = sumitOnLeave || effectiveSumitCount >= perBarberMax;
+      const shettyFull = shettyOnLeave || effectiveShettyCount >= perBarberMax;
+      const isFull = (availableBarbersCount === 0) || (bobbyFull && sumitFull && shettyFull);
 
       const bookingCount = slotBookings.length;
       const spotsLeft = Math.max(maxBookings - bookingCount, 0);
@@ -817,16 +849,15 @@ app.get('/api/slots', async (req, res) => {
         bobbyAvailable: !bobbyFull,
         sumitAvailable: !sumitFull,
         shettyAvailable: !shettyFull,
-        // Detailed per-barber status so UI can show "Bobby: 1/2"
         barberStatus: {
-          bobby: { count: effectiveBobbyCount, max: perBarberMax, full: bobbyFull },
-          sumit: { count: effectiveSumitCount, max: perBarberMax, full: sumitFull },
-          shetty: { count: effectiveShettyCount, max: perBarberMax, full: shettyFull }
+          bobby: { count: effectiveBobbyCount, max: bobbyOnLeave ? 0 : perBarberMax, full: bobbyFull, onLeave: bobbyOnLeave },
+          sumit: { count: effectiveSumitCount, max: sumitOnLeave ? 0 : perBarberMax, full: sumitFull, onLeave: sumitOnLeave },
+          shetty: { count: effectiveShettyCount, max: shettyOnLeave ? 0 : perBarberMax, full: shettyFull, onLeave: shettyOnLeave }
         }
       });
     }
 
-    res.json({ date, slots: slotsStatus });
+    res.json({ date, slots: slotsStatus, unavailableBarbers });
   } catch (err) {
     console.error('Error fetching slots:', err);
     res.status(500).json({ error: 'Server error' });
@@ -884,9 +915,10 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
 
     const settings = getSettingsCollection();
     const servicesCol = getServicesCollection();
-    const [blockedDoc, serviceDoc] = await Promise.all([
+    const [blockedDoc, serviceDoc, leavesDoc] = await Promise.all([
       settings.findOne({ _id: 'blocked_dates' }),
-      servicesCol.findOne({ name: normalizedService, gender: normalizedGender, active: { $ne: false } })
+      servicesCol.findOne({ name: normalizedService, gender: normalizedGender, active: { $ne: false } }),
+      settings.findOne({ _id: 'barber_leaves' })
     ]);
 
     if (blockedDoc && blockedDoc.dates && blockedDoc.dates.includes(date)) {
@@ -894,6 +926,27 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
     }
     if (!serviceDoc) {
       return res.status(400).json({ error: 'Invalid service for the selected gender.' });
+    }
+
+    const barberLeaves = leavesDoc ? (leavesDoc.leaves || []) : [];
+    const bobbyOnLeave = isBarberOnLeave('Bobby', date, barberLeaves);
+    const sumitOnLeave = isBarberOnLeave('Sumit', date, barberLeaves);
+    const shettyOnLeave = isBarberOnLeave('shetty Bhai', date, barberLeaves);
+
+    if (normalizedBarber === 'Bobby' && bobbyOnLeave) {
+      return res.status(400).json({ error: 'Bobby is on leave / unavailable on this date. Please choose another barber.' });
+    }
+    if (normalizedBarber === 'Sumit' && sumitOnLeave) {
+      return res.status(400).json({ error: 'Sumit is on leave / unavailable on this date. Please choose another barber.' });
+    }
+    if (normalizedBarber === 'shetty Bhai' && shettyOnLeave) {
+      return res.status(400).json({ error: 'Shetty Bhai is on leave / unavailable on this date. Please choose another barber.' });
+    }
+    if (normalizedGender === 'Female' && sumitOnLeave) {
+      return res.status(400).json({ error: 'Female services are provided by Sumit, who is on leave on this date.' });
+    }
+    if (normalizedBarber === 'Any Available' && bobbyOnLeave && sumitOnLeave && shettyOnLeave) {
+      return res.status(400).json({ error: 'All barbers are unavailable on this date. Salon is not accepting bookings.' });
     }
 
     // All standard slots accept any valid service (beard_only restriction removed)
@@ -944,43 +997,43 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
           const shettyCount = bookingsForSlot.filter(b => b.barber === 'shetty Bhai').length;
           const anyCount   = bookingsForSlot.filter(b => b.barber === 'Any Available').length;
 
-          // "Any" bookings fill Bobby first, then Sumit, then shetty Bhai
+          // "Any" bookings fill active barbers who are not on leave (Bobby -> Sumit -> Shetty)
           let remainingAny = anyCount;
 
-          const bobbyNeeded = Math.max(0, perBarberMax - bobbyCount);
+          const bobbyNeeded = bobbyOnLeave ? 0 : Math.max(0, perBarberMax - bobbyCount);
           const bobbyFromAny = Math.min(remainingAny, bobbyNeeded);
           const effectiveBobby = bobbyCount + bobbyFromAny;
           remainingAny -= bobbyFromAny;
 
-          const sumitNeeded = Math.max(0, perBarberMax - sumitCount);
+          const sumitNeeded = sumitOnLeave ? 0 : Math.max(0, perBarberMax - sumitCount);
           const sumitFromAny = Math.min(remainingAny, sumitNeeded);
           const effectiveSumit = sumitCount + sumitFromAny;
           remainingAny -= sumitFromAny;
 
-          const shettyNeeded = Math.max(0, perBarberMax - shettyCount);
+          const shettyNeeded = shettyOnLeave ? 0 : Math.max(0, perBarberMax - shettyCount);
           const shettyFromAny = Math.min(remainingAny, shettyNeeded);
           const effectiveShetty = shettyCount + shettyFromAny;
           remainingAny -= shettyFromAny;
 
-          const bobbyFull = effectiveBobby >= perBarberMax;
-          const sumitFull = effectiveSumit >= perBarberMax;
-          const shettyFull = effectiveShetty >= perBarberMax;
+          const bobbyFull = bobbyOnLeave || effectiveBobby >= perBarberMax;
+          const sumitFull = sumitOnLeave || effectiveSumitCount >= perBarberMax;
+          const shettyFull = shettyOnLeave || effectiveShettyCount >= perBarberMax;
 
           if (normalizedBarber === 'Bobby') {
             if (bobbyFull) {
-              throw httpError(400, `Bobby is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
+              throw httpError(400, bobbyOnLeave ? 'Bobby is on leave on this date.' : `Bobby is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
             }
           } else if (normalizedBarber === 'Sumit') {
             if (sumitFull) {
-              throw httpError(400, `Sumit is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
+              throw httpError(400, sumitOnLeave ? 'Sumit is on leave on this date.' : `Sumit is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
             }
           } else if (normalizedBarber === 'shetty Bhai') {
             if (shettyFull) {
-              throw httpError(400, `shetty Bhai is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
+              throw httpError(400, shettyOnLeave ? 'Shetty Bhai is on leave on this date.' : `shetty Bhai is fully booked for this slot (${perBarberMax}/${perBarberMax}). Please choose another slot or barber.`);
             }
           } else if (normalizedBarber === 'Any Available') {
             if (bobbyFull && sumitFull && shettyFull) {
-              throw httpError(400, 'This slot is fully booked. All barbers are at full capacity. Please choose another slot.');
+              throw httpError(400, 'This slot is fully booked or no barbers are available at this time. Please choose another slot.');
             }
           }
 
@@ -1129,6 +1182,87 @@ app.post('/api/settings/blocked-dates', requireAdmin, requireRole(['owner']), as
     res.json({ success: true });
   } catch (err) {
     console.error('Error saving blocked date:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ─── Barber Leaves & Unavailability API ─────────────────────────────────────
+
+// GET /api/settings/barber-leaves
+app.get('/api/settings/barber-leaves', requireAdmin, requireRole(['owner', 'staff']), async (req, res) => {
+  try {
+    const settings = getSettingsCollection();
+    const doc = await settings.findOne({ _id: 'barber_leaves' });
+    const leaves = (doc && Array.isArray(doc.leaves)) ? doc.leaves : [];
+    // Sort leaves newest start date first
+    leaves.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    res.json(leaves);
+  } catch (err) {
+    console.error('Error fetching barber leaves:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/settings/barber-leaves
+app.post('/api/settings/barber-leaves', requireAdmin, requireRole(['owner', 'staff']), async (req, res) => {
+  try {
+    const settings = getSettingsCollection();
+    const { barber, date, endDate, reason } = req.body;
+
+    const validBarbers = ['Bobby', 'Sumit', 'shetty Bhai'];
+    const matched = validBarbers.find(b => b.toLowerCase() === (barber || '').toLowerCase().trim());
+    if (!matched) {
+      return res.status(400).json({ error: 'Valid barber is required (Bobby, Sumit, or shetty Bhai)' });
+    }
+    if (!date || !isValidDateString(date)) {
+      return res.status(400).json({ error: 'Valid start date (YYYY-MM-DD) is required' });
+    }
+    if (endDate) {
+      if (!isValidDateString(endDate)) {
+        return res.status(400).json({ error: 'Valid end date (YYYY-MM-DD) is required' });
+      }
+      if (endDate < date) {
+        return res.status(400).json({ error: 'End date cannot be earlier than start date' });
+      }
+    }
+
+    const newLeave = {
+      id: `bl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      barber: matched,
+      date,
+      endDate: endDate || null,
+      reason: (reason || '').trim().substring(0, 150),
+      createdAt: new Date().toISOString()
+    };
+
+    await settings.updateOne(
+      { _id: 'barber_leaves' },
+      { $push: { leaves: newLeave } },
+      { upsert: true }
+    );
+
+    res.json({ success: true, leave: newLeave });
+  } catch (err) {
+    console.error('Error adding barber leave:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/settings/barber-leaves/:id
+app.delete('/api/settings/barber-leaves/:id', requireAdmin, requireRole(['owner', 'staff']), async (req, res) => {
+  try {
+    const settings = getSettingsCollection();
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'Leave id is required' });
+    }
+    await settings.updateOne(
+      { _id: 'barber_leaves' },
+      { $pull: { leaves: { id } } }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting barber leave:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

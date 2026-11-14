@@ -150,6 +150,53 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   let servicesList: any[] = [];
+  let latestUnavailableBarbers: string[] = [];
+
+  const updateBarberOptionsForAvailability = () => {
+    if (!barberInput) return;
+    const gender = genderInput ? genderInput.value : '';
+    const currentVal = barberInput.value;
+
+    if (gender === 'Male') {
+      const barbers = [
+        { id: 'Any Available', label: 'Any Available' },
+        { id: 'Bobby', label: 'Bobby' },
+        { id: 'Sumit', label: 'Sumit' },
+        { id: 'shetty Bhai', label: 'shetty Bhai' }
+      ];
+
+      const allBarbersOff = ['Bobby', 'Sumit', 'shetty Bhai'].every(b => latestUnavailableBarbers.includes(b));
+
+      barberInput.innerHTML = '<option value="" disabled selected>Preferred Barber</option>';
+      barbers.forEach(b => {
+        const isOff = b.id === 'Any Available' ? allBarbersOff : latestUnavailableBarbers.includes(b.id);
+        const opt = document.createElement('option');
+        opt.value = b.id;
+        opt.textContent = isOff ? `${b.label} (Off Today)` : b.label;
+        opt.disabled = isOff;
+        barberInput.appendChild(opt);
+      });
+
+      if (currentVal && !latestUnavailableBarbers.includes(currentVal) && !(currentVal === 'Any Available' && allBarbersOff)) {
+        barberInput.value = currentVal;
+      } else if (!allBarbersOff) {
+        barberInput.value = 'Any Available';
+      } else {
+        barberInput.value = '';
+      }
+    } else if (gender === 'Female') {
+      const sumitOff = latestUnavailableBarbers.includes('Sumit');
+      barberInput.innerHTML = `
+        <option value="Sumit" ${sumitOff ? 'disabled' : 'selected'}>Sumit ${sumitOff ? '(Unavailable / On Leave Today)' : '(Specialist)'}</option>
+      `;
+      if (!sumitOff) {
+        barberInput.value = 'Sumit';
+        clearFieldError('b-barber');
+      } else {
+        barberInput.value = '';
+      }
+    }
+  };
 
   const updateBookingServiceOptions = () => {
     if (!genderInput || !serviceInput || !barberInput) return;
@@ -168,20 +215,7 @@ document.addEventListener('DOMContentLoaded', () => {
       serviceInput.appendChild(option);
     });
 
-    if (gender === 'Male') {
-      barberInput.innerHTML = `
-        <option value="" disabled selected>Preferred Barber</option>
-        <option value="Any Available">Any Available</option>
-        <option value="Bobby">Bobby</option>
-        <option value="Sumit">Sumit</option>
-        <option value="shetty Bhai">shetty Bhai</option>
-      `;
-    } else if (gender === 'Female') {
-      barberInput.innerHTML = `
-        <option value="Sumit" selected>Sumit (Specialist)</option>
-      `;
-      clearFieldError('b-barber');
-    }
+    updateBarberOptionsForAvailability();
   };
 
   // Attach change and input listeners to clear errors in real time
@@ -344,9 +378,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Check female availability (Sumit must be free)
+      // Check female availability (Sumit must be free and not on leave)
       let isTaken = slot.taken;
-      if (gender === 'Female' && !slot.sumitAvailable) {
+      if (gender === 'Female' && (!slot.sumitAvailable || slot.barberStatus?.sumit?.onLeave)) {
         isTaken = true;
       }
 
@@ -381,29 +415,26 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const statusHtml = `<span class="slot-status-badge" style="background:${statusBg};color:${statusColor};">${statusText}</span>`;
 
-      // Barber pills — now use object {count, max, full}
+      // Barber pills — now use object {count, max, full, onLeave}
       const bStatus = slot.barberStatus?.bobby;
       const sStatus = slot.barberStatus?.sumit;
       const shStatus = slot.barberStatus?.shetty;
 
-      const bobbyBg    = bStatus?.full ? 'rgba(180,0,0,0.12)' : 'rgba(40,160,70,0.10)';
-      const bobbyClr   = bStatus?.full ? 'rgba(180,0,0,0.85)' : 'rgba(30,140,60,0.9)';
-      const bobbyLabel = bStatus ? `Bobby ${bStatus.count}/${bStatus.max}` : 'Bobby';
-      const bobbyIcon  = bStatus?.full ? '✗' : '✓';
+      const getBarberPill = (name: string, status: any) => {
+        if (!status) return `<span style="font-size:0.58rem;background:rgba(40,160,70,0.10);color:rgba(30,140,60,0.9);padding:2px 5px;border-radius:3px;white-space:nowrap;">✓ ${name}</span>`;
+        if (status.onLeave) {
+          return `<span style="font-size:0.58rem;background:rgba(120,120,120,0.15);color:rgba(120,120,120,0.95);padding:2px 5px;border-radius:3px;white-space:nowrap;text-decoration:line-through;" title="${name} is on leave / unavailable">✗ ${name} (Off)</span>`;
+        }
+        const bg = status.full ? 'rgba(180,0,0,0.12)' : 'rgba(40,160,70,0.10)';
+        const clr = status.full ? 'rgba(180,0,0,0.85)' : 'rgba(30,140,60,0.9)';
+        const icon = status.full ? '✗' : '✓';
+        const label = `${name} ${status.count}/${status.max}`;
+        return `<span style="font-size:0.58rem;background:${bg};color:${clr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${icon} ${label}</span>`;
+      };
 
-      const sumitBg    = sStatus?.full ? 'rgba(180,0,0,0.12)' : 'rgba(40,160,70,0.10)';
-      const sumitClr   = sStatus?.full ? 'rgba(180,0,0,0.85)' : 'rgba(30,140,60,0.9)';
-      const sumitLabel = sStatus ? `Sumit ${sStatus.count}/${sStatus.max}` : 'Sumit';
-      const sumitIcon  = sStatus?.full ? '✗' : '✓';
-
-      const shettyBg    = shStatus?.full ? 'rgba(180,0,0,0.12)' : 'rgba(40,160,70,0.10)';
-      const shettyClr   = shStatus?.full ? 'rgba(180,0,0,0.85)' : 'rgba(30,140,60,0.9)';
-      const shettyLabel = shStatus ? `Shetty ${shStatus.count}/${shStatus.max}` : 'Shetty';
-      const shettyIcon  = shStatus?.full ? '✗' : '✓';
-
-      const bobbyPill = `<span style="font-size:0.58rem;background:${bobbyBg};color:${bobbyClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${bobbyIcon} ${bobbyLabel}</span>`;
-      const sumitPill = `<span style="font-size:0.58rem;background:${sumitBg};color:${sumitClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${sumitIcon} ${sumitLabel}</span>`;
-      const shettyPill = `<span style="font-size:0.58rem;background:${shettyBg};color:${shettyClr};padding:2px 5px;border-radius:3px;white-space:nowrap;">${shettyIcon} ${shettyLabel}</span>`;
+      const bobbyPill = getBarberPill('Bobby', bStatus);
+      const sumitPill = getBarberPill('Sumit', sStatus);
+      const shettyPill = getBarberPill('Shetty', shStatus);
 
       btn.className = `slot-btn hover-target ${isTaken ? 'taken' : ''}`;
       btn.style.animationDelay = `${index * 30}ms`;
@@ -481,6 +512,8 @@ document.addEventListener('DOMContentLoaded', () => {
         timeSlotGrid.innerHTML = `<p style="grid-column: 1/-1; color: var(--theme-main); font-family: var(--font-serif); text-align: center; padding: 2rem; font-size: 1.2rem; letter-spacing: 0.05em;">🔒 Closed: ${data.message || 'Salon is closed on this date.'}</p>`;
         return;
       }
+      latestUnavailableBarbers = data.unavailableBarbers || [];
+      updateBarberOptionsForAvailability();
       currentSlotsData = data.slots;
       renderSlots();
     } catch {
@@ -1798,9 +1831,10 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>
             </div>
 
-            <!-- Toolbar: Manual booking & Export CSV -->
+            <!-- Toolbar: Manual booking, Barber Off Days & Export CSV -->
             <div class="admin-actions-toolbar">
               <button id="toggle-manual-booking-btn" class="admin-btn admin-btn-primary hover-target">+ Add Manual Booking</button>
+              <button id="toggle-barber-leaves-btn" class="admin-btn admin-btn-secondary hover-target">📅 Barber Off Days</button>
               <button id="export-bookings-csv-btn" class="admin-btn admin-btn-secondary hover-target">Export CSV</button>
             </div>
 
@@ -2220,6 +2254,63 @@ document.addEventListener('DOMContentLoaded', () => {
                   </form>
                 </div>  
               </div>
+
+              <!-- Barber Off Days Modal Overlay -->
+              <div id="barber-leaves-modal-wrap" class="admin-modal-overlay">
+                <div class="admin-glass-panel admin-modal-card" style="max-width: 640px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <div>
+                      <h3 style="font-family: var(--font-serif); font-size: 1.5rem; color: var(--theme-main); margin: 0;">📅 Barber Off Days & Leave</h3>
+                      <p style="margin: 0.25rem 0 0; font-size: 0.82rem; color: var(--text-secondary); font-family: var(--font-mono);">Mark barber unavailability to auto-adjust slots and prevent overbooking.</p>
+                    </div>
+                    <button type="button" id="bl-close-btn" class="hover-target" style="background:transparent; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-secondary);">&times;</button>
+                  </div>
+
+                  <!-- Form to add leave -->
+                  <form id="admin-barber-leaves-form" style="background: rgba(255,255,255,0.45); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
+                    <div style="display:flex; gap:1rem; margin-bottom: 0.85rem; flex-wrap: wrap;">
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">Barber</label>
+                        <select id="bl-barber" required class="admin-select">
+                          <option value="" disabled selected>Select Barber</option>
+                          <option value="Bobby">Bobby</option>
+                          <option value="Sumit">Sumit</option>
+                          <option value="shetty Bhai">shetty Bhai</option>
+                        </select>
+                      </div>
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">Start Date</label>
+                        <input type="date" id="bl-date" class="admin-input" required>
+                      </div>
+                    </div>
+                    <div style="display:flex; gap:1rem; margin-bottom: 0.85rem; flex-wrap: wrap;">
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">End Date (Optional Range)</label>
+                        <input type="date" id="bl-end-date" class="admin-input" placeholder="Optional">
+                      </div>
+                      <div style="flex:1; min-width: 140px;">
+                        <label class="admin-label">Reason / Note (Optional)</label>
+                        <input type="text" id="bl-reason" class="admin-input" placeholder="e.g. Weekly Off, Sick, Personal">
+                      </div>
+                    </div>
+                    <div style="display:flex; justify-content: flex-end;">
+                      <button type="submit" class="admin-btn admin-btn-primary hover-target" style="padding: 0.5rem 1.25rem;">+ Add Barber Off Day</button>
+                    </div>
+                  </form>
+
+                  <!-- Existing Leaves List -->
+                  <div>
+                    <h4 style="font-family: var(--font-serif); font-size: 1.15rem; color: var(--theme-main); margin-bottom: 0.75rem;">Scheduled Off Days & Leaves</h4>
+                    <div id="barber-leaves-list-wrap" style="max-height: 280px; overflow-y: auto;">
+                      <ul id="barber-leaves-list" style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:0.6rem;"></ul>
+                    </div>
+                  </div>
+
+                  <div class="admin-modal-actions" style="margin-top: 1.5rem; justify-content: flex-end;">
+                    <button type="button" id="bl-done-btn" class="admin-btn admin-btn-secondary hover-target">Close</button>
+                  </div>
+                </div>
+              </div>
             </div>
   
             <!-- Services Panel -->
@@ -2361,6 +2452,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 </form>
               </div>
   
+              <!-- Barber Off Days & Unavailability -->
+              <div class="admin-glass-panel" style="margin-bottom: 2rem;">
+                <h2 style="font-family: var(--font-serif); font-size: 2rem; color: var(--theme-main); margin-bottom: 0.5rem;">Barber Off Days & Availability</h2>
+                <p style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Mark barber leaves or days off to automatically adjust customer slot capacity and prevent bookings.</p>
+                <form id="settings-barber-leaves-form" style="display:flex; gap:1rem; margin-bottom: 1.5rem; flex-wrap:wrap; align-items:flex-end;">
+                  <div style="flex:1; min-width: 140px;">
+                    <label class="admin-label">BARBER</label>
+                    <select id="s-bl-barber" class="admin-select" required>
+                      <option value="" disabled selected>Select Barber</option>
+                      <option value="Bobby">Bobby</option>
+                      <option value="Sumit">Sumit</option>
+                      <option value="shetty Bhai">shetty Bhai</option>
+                    </select>
+                  </div>
+                  <div style="flex:1; min-width: 130px;">
+                    <label class="admin-label">START DATE</label>
+                    <input type="date" id="s-bl-date" class="admin-input" required>
+                  </div>
+                  <div style="flex:1; min-width: 130px;">
+                    <label class="admin-label">END DATE (OPTIONAL)</label>
+                    <input type="date" id="s-bl-end-date" class="admin-input" placeholder="Optional">
+                  </div>
+                  <div style="flex:1; min-width: 150px;">
+                    <label class="admin-label">REASON</label>
+                    <input type="text" id="s-bl-reason" class="admin-input" placeholder="e.g. Sick, Vacation, Off">
+                  </div>
+                  <button type="submit" class="admin-btn admin-btn-danger hover-target" style="border-radius: 10px; height: 42px;">Add Off Day</button>
+                </form>
+                <div id="settings-barber-leaves-list-wrap">
+                  <h3 style="font-family: var(--font-serif); font-size: 1.25rem; color: var(--text-secondary); margin-bottom: 1rem;">Current & Scheduled Off Days</h3>
+                  <ul id="settings-barber-leaves-list" style="list-style:none; padding:0; display:flex; flex-direction:column; gap:0.5rem;"></ul>
+                </div>
+              </div>
+
               <!-- Blocked Dates -->
               <div class="admin-glass-panel">
                 <h2 style="font-family: var(--font-serif); font-size: 2rem; color: var(--theme-main); margin-bottom: 1.5rem;">Holidays & Blocked Dates</h2>
@@ -2725,6 +2850,19 @@ document.addEventListener('DOMContentLoaded', () => {
               if (s.isBreak) opt.disabled = true;
               mbTime.appendChild(opt);
             });
+
+            // Update mbBarber options availability based on data.unavailableBarbers
+            const unavail: string[] = data.unavailableBarbers || [];
+            Array.from(mbBarber.options).forEach(opt => {
+              const val = opt.value;
+              if (val === 'Any Available' || !val) return;
+              const isOff = unavail.includes(val);
+              opt.textContent = isOff ? `${val} (Off)` : val;
+              opt.disabled = isOff;
+            });
+            if (unavail.includes(mbBarber.value)) {
+              mbBarber.value = 'Any Available';
+            }
           } catch {
             mbTime.innerHTML = '<option value="" disabled selected>Error loading slots</option>';
           }
@@ -2770,6 +2908,133 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
       }
+
+      // Setup Barber Leaves handlers
+      const blModalWrap = document.getElementById('barber-leaves-modal-wrap');
+      const blFormModal = document.getElementById('admin-barber-leaves-form') as HTMLFormElement | null;
+      const blFormSettings = document.getElementById('settings-barber-leaves-form') as HTMLFormElement | null;
+
+      // Open Barber Leaves modal
+      document.body.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest('#toggle-barber-leaves-btn');
+        if (btn && blModalWrap) {
+          blModalWrap.classList.add('active');
+          const blDate = document.getElementById('bl-date') as HTMLInputElement | null;
+          if (blDate && !blDate.value) {
+            blDate.value = getIndiaDateString();
+            blDate.min = getIndiaDateString();
+          }
+          fetchBarberLeaves();
+        }
+      });
+
+      // Close Barber Leaves modal
+      const hideBlModal = () => { if (blModalWrap) blModalWrap.classList.remove('active'); };
+      document.getElementById('bl-close-btn')?.addEventListener('click', hideBlModal);
+      document.getElementById('bl-done-btn')?.addEventListener('click', hideBlModal);
+      blModalWrap?.addEventListener('click', (e) => { if (e.target === blModalWrap) hideBlModal(); });
+
+      // Add leave from modal form
+      if (blFormModal) {
+        blFormModal.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const barber = (document.getElementById('bl-barber') as HTMLSelectElement).value;
+          const date = (document.getElementById('bl-date') as HTMLInputElement).value;
+          const endDate = (document.getElementById('bl-end-date') as HTMLInputElement).value;
+          const reason = (document.getElementById('bl-reason') as HTMLInputElement).value;
+
+          if (!barber || !date) {
+            showToast('Please select a barber and date', 'error');
+            return;
+          }
+
+          try {
+            const res = await authFetch('/api/settings/barber-leaves', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ barber, date, endDate: endDate || undefined, reason })
+            });
+            if (res.ok) {
+              showToast(`${barber} marked as unavailable/off for ${endDate ? date + ' to ' + endDate : date}`, 'success');
+              blFormModal.reset();
+              const blDate = document.getElementById('bl-date') as HTMLInputElement | null;
+              if (blDate) {
+                blDate.value = getIndiaDateString();
+                blDate.min = getIndiaDateString();
+              }
+              await fetchBarberLeaves();
+              fetchAdminData();
+            } else {
+              const err = await res.json().catch(() => ({}));
+              showToast(err.error || 'Failed to save barber leave', 'error');
+            }
+          } catch {
+            showToast('Server error while saving barber leave', 'error');
+          }
+        });
+      }
+
+      // Add leave from Settings tab form
+      if (blFormSettings) {
+        blFormSettings.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const barber = (document.getElementById('s-bl-barber') as HTMLSelectElement).value;
+          const date = (document.getElementById('s-bl-date') as HTMLInputElement).value;
+          const endDate = (document.getElementById('s-bl-end-date') as HTMLInputElement).value;
+          const reason = (document.getElementById('s-bl-reason') as HTMLInputElement).value;
+
+          if (!barber || !date) {
+            showToast('Please select a barber and date', 'error');
+            return;
+          }
+
+          try {
+            const res = await authFetch('/api/settings/barber-leaves', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ barber, date, endDate: endDate || undefined, reason })
+            });
+            if (res.ok) {
+              showToast(`${barber} marked as unavailable/off!`, 'success');
+              blFormSettings.reset();
+              await fetchBarberLeaves();
+              fetchAdminData();
+            } else {
+              const err = await res.json().catch(() => ({}));
+              showToast(err.error || 'Failed to save barber leave', 'error');
+            }
+          } catch {
+            showToast('Server error while saving barber leave', 'error');
+          }
+        });
+      }
+
+      // Delete leave click delegation
+      document.body.addEventListener('click', async (e) => {
+        const btn = (e.target as HTMLElement).closest('.delete-barber-leave-btn') as HTMLElement | null;
+        if (!btn) return;
+        const id = btn.dataset.id;
+        if (!id) return;
+
+        if (!confirm('Are you sure you want to remove this leave and restore the barber availability?')) {
+          return;
+        }
+
+        try {
+          const res = await authFetch(`/api/settings/barber-leaves/${id}`, {
+            method: 'DELETE'
+          });
+          if (res.ok) {
+            showToast('Barber off day removed. Barber is now available!', 'success');
+            await fetchBarberLeaves();
+            fetchAdminData();
+          } else {
+            showToast('Failed to remove leave', 'error');
+          }
+        } catch {
+          showToast('Server error while removing leave', 'error');
+        }
+      });
 
     } else {
       container.style.display = 'block';
@@ -2840,6 +3105,88 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (err) {
       console.error('Error loading blocked dates:', err);
+    }
+
+    // Fetch barber leaves
+    await fetchBarberLeaves();
+  }
+
+  async function fetchBarberLeaves() {
+    const listModal = document.getElementById('barber-leaves-list') as HTMLUListElement | null;
+    const listSettings = document.getElementById('settings-barber-leaves-list') as HTMLUListElement | null;
+    if (!listModal && !listSettings) return;
+
+    try {
+      const res = await authFetch('/api/settings/barber-leaves');
+      if (!res.ok) return;
+      const leaves = await res.json();
+      if (!Array.isArray(leaves)) return;
+
+      const todayStr = getIndiaDateString();
+
+      const renderItems = (ul: HTMLUListElement) => {
+        ul.innerHTML = '';
+        if (leaves.length === 0) {
+          ul.innerHTML = '<li style="font-family:var(--font-mono);font-size:0.85rem;color:var(--text-secondary);padding:0.75rem 0;">No scheduled leaves or off days. All barbers are active.</li>';
+          return;
+        }
+
+        leaves.forEach((l: any) => {
+          const li = document.createElement('li');
+          li.className = 'barber-leave-item';
+          li.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.65rem 0.9rem;
+            background: rgba(255, 255, 255, 0.45);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+          `;
+
+          let statusBadge = '';
+          const isOngoing = todayStr >= l.date && (!l.endDate || todayStr <= l.endDate);
+          const isUpcoming = todayStr < l.date;
+
+          if (isOngoing) {
+            statusBadge = '<span style="background: rgba(220, 53, 69, 0.12); color: #d9383a; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; letter-spacing: 0.04em;">OFF TODAY</span>';
+          } else if (isUpcoming) {
+            statusBadge = '<span style="background: rgba(255, 165, 0, 0.15); color: #c87a00; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; letter-spacing: 0.04em;">UPCOMING</span>';
+          } else {
+            statusBadge = '<span style="background: rgba(120, 120, 120, 0.12); color: #777; font-weight: 500; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem;">PAST</span>';
+          }
+
+          const dateRange = l.endDate ? `${escapeHtml(l.date)} &rarr; ${escapeHtml(l.endDate)}` : escapeHtml(l.date);
+          const reasonText = l.reason ? ` <span style="color: var(--text-secondary); font-style: italic;">(${escapeHtml(l.reason)})</span>` : '';
+
+          // Barber color dot
+          const barberColor = l.barber === 'Bobby' ? '#c89d3a' : (l.barber === 'Sumit' ? '#2e8b57' : '#5b6cf0');
+
+          li.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+              <span style="font-weight: 700; color: ${barberColor}; display: inline-flex; align-items: center; gap: 4px;">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: ${barberColor};"></span>
+                ${escapeHtml(l.barber)}
+              </span>
+              <span>📅 ${dateRange}</span>
+              ${statusBadge}
+              ${reasonText}
+            </div>
+            <button class="delete-barber-leave-btn hover-target" data-id="${escapeHtml(l.id)}" title="Remove leave and restore barber availability" style="background: transparent; border: 1px solid rgba(220,53,69,0.3); color: #dc3545; border-radius: 5px; padding: 3px 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; text-transform: uppercase;">Remove</button>
+          `;
+
+          ul.appendChild(li);
+        });
+      };
+
+      if (listModal) renderItems(listModal);
+      if (listSettings) renderItems(listSettings);
+    } catch (err) {
+      console.error('Error fetching barber leaves:', err);
     }
   }
 

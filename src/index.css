@@ -3666,3 +3666,21 @@ textarea {
     max-width: 65%;
   }
 }
+
+/* Barber Leaves & Unavailability */
+.barber-leave-item {
+  transition: all 0.2s ease;
+}
+.barber-leave-item:hover {
+  background: rgba(255, 255, 255, 0.7) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  transform: translateX(2px);
+}
+.delete-barber-leave-btn {
+  transition: all 0.18s ease;
+}
+.delete-barber-leave-btn:hover {
+  background: #dc3545 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(220, 53, 69, 0.35);
+}

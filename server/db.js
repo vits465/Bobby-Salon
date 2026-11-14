@@ -137,6 +137,10 @@ function createMockDB() {
         weekday: { start: 9, end: 20 },
         saturday: { start: 14, end: 20 },
         sunday: { start: 9, end: 21 }
+      },
+      {
+        _id: 'barber_leaves',
+        leaves: []
       }
     ],
     services: [
@@ -237,6 +241,12 @@ function createMockDB() {
               item[k] = (item[k] || 0) + v;
             });
           }
+          if (update.$push) {
+            Object.entries(update.$push).forEach(([k, v]) => {
+              if (!Array.isArray(item[k])) item[k] = [];
+              item[k].push(v);
+            });
+          }
           if (update.$addToSet) {
             Object.entries(update.$addToSet).forEach(([k, v]) => {
               if (!Array.isArray(item[k])) item[k] = [];
@@ -246,7 +256,12 @@ function createMockDB() {
           if (update.$pull) {
             Object.entries(update.$pull).forEach(([k, v]) => {
               if (Array.isArray(item[k])) {
-                item[k] = item[k].filter(elem => elem !== v);
+                item[k] = item[k].filter(elem => {
+                  if (v && typeof v === 'object') {
+                    return !Object.entries(v).every(([pk, pv]) => elem && elem[pk] === pv);
+                  }
+                  return elem !== v;
+                });
               }
             });
           }
@@ -265,6 +280,12 @@ function createMockDB() {
                 item[k] = (item[k] || 0) + v;
               });
             }
+            if (update.$push) {
+              Object.entries(update.$push).forEach(([k, v]) => {
+                if (!Array.isArray(item[k])) item[k] = [];
+                item[k].push(v);
+              });
+            }
             if (update.$addToSet) {
               Object.entries(update.$addToSet).forEach(([k, v]) => {
                 if (!Array.isArray(item[k])) item[k] = [];
@@ -274,7 +295,12 @@ function createMockDB() {
             if (update.$pull) {
               Object.entries(update.$pull).forEach(([k, v]) => {
                 if (Array.isArray(item[k])) {
-                  item[k] = item[k].filter(elem => elem !== v);
+                  item[k] = item[k].filter(elem => {
+                    if (v && typeof v === 'object') {
+                      return !Object.entries(v).every(([pk, pv]) => elem && elem[pk] === pv);
+                    }
+                    return elem !== v;
+                  });
                 }
               });
             }
