@@ -9,7 +9,9 @@
     "start": "node server/server.js",
     "deploy": "npm run build && node server/server.js",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "backup:db": "node server/scripts/backup-db.mjs",
+    "restore:db": "node server/scripts/restore-db.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

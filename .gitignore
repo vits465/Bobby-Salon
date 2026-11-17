@@ -16,6 +16,7 @@ dist-ssr
 
 # Runtime data
 database.json
+backups/
 public/gallery/collection/*
 !public/gallery/collection/.gitkeep
 
