@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bobby Salon — Project Closure & 6-Month Maintenance Completion Report</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    :root {
+      --primary: #1a2a1a;
+      --accent: #b48c36;
+      --accent-dark: #8c6a21;
+      --text: #222222;
+      --text-muted: #555555;
+      --bg: #ffffff;
+      --panel: #fcfbf8;
+      --border: #e6e2d8;
+      --border-dark: #ccc5b3;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text);
+      background-color: #f3efe6;
+      line-height: 1.6;
+      font-size: 14px;
+      padding: 40px 20px;
+    }
+
+    .page {
+      max-width: 860px;
+      margin: 0 auto;
+      background: var(--bg);
+      padding: 60px 70px;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      border: 1px solid var(--border);
+    }
+
+    /* Print Optimizations */
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+      .page {
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        max-width: 100%;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+    }
+
+    /* Header */
+    .header {
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 24px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .brand-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .doc-badge {
+      display: inline-block;
+      background: rgba(180, 140, 54, 0.12);
+      color: var(--accent-dark);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 6px;
+    }
+
+    .meta-box {
+      text-align: right;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .meta-box strong { color: var(--text); }
+
+    /* Alert Banner */
+    .notice-card {
+      background: linear-gradient(135deg, rgba(180, 140, 54, 0.08) 0%, rgba(26, 42, 26, 0.05) 100%);
+      border-left: 4px solid var(--accent);
+      padding: 16px 20px;
+      border-radius: 4px;
+      margin-bottom: 30px;
+    }
+    .notice-card h4 {
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .notice-card p {
+      font-size: 13px;
+      color: #333;
+    }
+
+    /* Sections */
+    h2 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 18px;
+      color: var(--primary);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin: 28px 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    p { margin-bottom: 12px; color: #333; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      font-size: 12.5px;
+    }
+
+    th {
+      background-color: #f7f5ef;
+      color: var(--primary);
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--border-dark);
+      font-family: 'Inter', sans-serif;
+    }
+
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    /* Lists */
+    ul {
+      margin: 8px 0 16px 20px;
+      font-size: 13px;
+    }
+    li { margin-bottom: 6px; }
+
+    /* Highlights & Tags */
+    .status-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .status-complete { background: #d4edda; color: #155724; }
+    .status-active { background: #e8f4fd; color: #0d6efd; }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 16px 0;
+    }
+
+    .feature-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 14px 16px;
+      border-radius: 6px;
+    }
+    .feature-card h3 {
+      font-size: 13.5px;
+      color: var(--primary);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .feature-card p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    /* Support Options */
+    .support-box {
+      border: 1px solid var(--accent);
+      background: #faf8f2;
+      border-radius: 6px;
+      padding: 16px;
+      margin-top: 12px;
+    }
+    .support-box h3 {
+      color: var(--accent-dark);
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    /* Sign-off */
+    .signoff-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: 40px;
+      padding-top: 24px;
+      border-top: 1px dashed var(--border-dark);
+    }
+    .sign-col {
+      font-size: 12.5px;
+    }
+    .sign-line {
+      height: 40px;
+      border-bottom: 1px solid #777;
+      margin: 20px 0 8px;
+    }
+
+    .print-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: var(--primary);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+    .print-btn:hover {
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+
+  <button class="print-btn no-print" onclick="window.print()">
+    🖨️ Print / Save as PDF
+  </button>
+
+  <div class="page">
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <div class="brand-title">Bobby Salon</div>
+        <div class="doc-badge">Official Handover & Warranty Closure</div>
+      </div>
+      <div class="meta-box">
+        <div><strong>Live Domain:</strong> https://bobbysalon.in</div>
+        <div><strong>Project Start:</strong> June 10, 2026</div>
+        <div><strong>Go-Live Date:</strong> June 15, 2026</div>
+        <div><strong>Closure Date:</strong> November 14, 2026</div>
+        <div><strong>Maintenance Duration:</strong> 6 Months (152 Days)</div>
+      </div>
+    </div>
+
+    <!-- Alert Banner -->
+    <div class="notice-card">
+      <h4>Notice of Maintenance Period Completion</h4>
+      <p>This report confirms that the agreed <strong>6-month complimentary post-launch support and maintenance warranty</strong> for the Bobby Salon Web Application has reached its scheduled conclusion on <strong>November 14, 2026</strong>. All scoped deliverables and requested enhancements have been delivered, verified, and placed into autonomous production.</p>
+    </div>
+
+    <!-- 1. Executive Timeline -->
+    <h2>1. Project Milestones & Timeline Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Phase / Milestone</th>
+          <th>Date Range</th>
+          <th>Status</th>
+          <th>Summary of Work</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Initial Build & Architecture</strong></td>
+          <td>June 8 – June 10, 2026</td>
+          <td><span class="status-pill status-complete">Completed</span></td>
+          <td>Frontend UI, brand styling, service catalog, responsive layouts.</td>
+        </tr>
+        <tr>
+          <td><strong>Full-Stack & WhatsApp Engine</strong></td>
+          <td>June 11 – June 14, 2026</td>
+          <td><span class="status-pill status-complete">Completed</span></td>
+          <td>Express API, MongoDB transactions, Cloudinary media CDN, WhatsApp notification engine.</td>
+        </tr>
+        <tr>
+          <td><strong>Production Go-Live (v1.0)</strong></td>
+          <td>June 15, 2026</td>
+          <td><span class="status-pill status-complete">Launched</span></td>
+          <td>Live on custom domain <code>bobbysalon.in</code> with SSL, SEO tags, and Google Analytics.</td>
+        </tr>
+        <tr>
+          <td><strong>Maintenance: Device Hardening</strong></td>
+          <td>Late June 2026</td>
+          <td><span class="status-pill status-complete">Completed</span></td>
+          <td>CSS fallbacks for older mobile browsers, establishment year update (2013).</td>
+        </tr>
+        <tr>
+          <td><strong>Maintenance: Slot & Mobile Upgrade</strong></td>
+          <td>October 2026</td>
+          <td><span class="status-pill status-complete">Completed</span></td>
+          <td>Mobile card view for admin, elimination of table scrolls, 30-min unified slots, removed beard-only limits.</td>
+        </tr>
+        <tr>
+          <td><strong>Maintenance: Barber Leave System</strong></td>
+          <td>November 2026</td>
+          <td><span class="status-pill status-complete">Completed</span></td>
+          <td>Complete Barber Off-Days system with automated slot capacity scaling and female specialist protection.</td>
+        </tr>
+        <tr>
+          <td><strong>6-Month Support Closure</strong></td>
+          <td><strong>November 14, 2026</strong></td>
+          <td><span class="status-pill status-active">Closed</span></td>
+          <td><strong>Final audit, handover of assets, transition to post-maintenance mode.</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 2. Deliverables Summary -->
+    <h2>2. Key Systems Delivered & Fully Operational</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <h3>1. Public Salon Web Experience</h3>
+        <p>Premium single-page web app with interactive service filter (Male/Female/All), 1-click booking deep-links, 3D gallery, and Progressive Web App (PWA) installation.</p>
+      </div>
+      <div class="feature-card">
+        <h3>2. Race-Safe Booking Engine</h3>
+        <p>Smart 30-min slot schedule with database serialization preventing duplicate appointments, live barber seat indicators, and automatic waitlist queueing.</p>
+      </div>
+      <div class="feature-card">
+        <h3>3. Full Salon Admin Dashboard</h3>
+        <p>Recent-first bookings table with mobile card view, search filters, 1-click status actions (Complete/Cancel), direct client calling, and CSV export.</p>
+      </div>
+      <div class="feature-card">
+        <h3>4. Barber Leave & Availability Manager</h3>
+        <p>Dynamic scheduling of barber leaves (Bobby, Sumit, Shetty Bhai) that automatically recalculates slot capacities and guards female bookings.</p>
+      </div>
+      <div class="feature-card">
+        <h3>5. Dynamic Services & Timings Editor</h3>
+        <p>Full control over service names, prices (INR), and durations, plus configurable salon opening/closing hours and holiday date blocking.</p>
+      </div>
+      <div class="feature-card">
+        <h3>6. Cloud Media & Free WhatsApp Alerts</h3>
+        <p>Automated WhatsApp booking confirmations for clients, instant desk alerts, and high-speed Cloudinary CDN media delivery.</p>
+      </div>
+    </div>
+
+    <!-- 3. Current System Health -->
+    <h2>3. Production Health & Security Audit</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>System Component</th>
+          <th>Current Status</th>
+          <th>Operational Health</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Website & Domain</strong></td>
+          <td><span class="status-pill status-complete">100% Online</span></td>
+          <td>Live on <code>https://bobbysalon.in</code> via Vercel Edge Network.</td>
+        </tr>
+        <tr>
+          <td><strong>Database Engine</strong></td>
+          <td><span class="status-pill status-complete">Optimal</span></td>
+          <td>MongoDB Atlas with active replica sets and automated backups.</td>
+        </tr>
+        <tr>
+          <td><strong>Security Protocols</strong></td>
+          <td><span class="status-pill status-complete">Hardened</span></td>
+          <td>HTTP Helmet headers, strict CORS, rate limiting, and input sanitization.</td>
+        </tr>
+        <tr>
+          <td><strong>Performance & SEO</strong></td>
+          <td><span class="status-pill status-complete">Excellent</span></td>
+          <td>Lighthouse 90+, Google Search Console indexed, WebP image delivery.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="page-break"></div>
+
+    <!-- 4. Ongoing Support Options -->
+    <h2>4. Post-Maintenance Options (Beyond 6 Months)</h2>
+    <p>While the application is designed to operate autonomously, Bobby Salon can choose either of the following paths for future maintenance and feature development:</p>
+
+    <div class="support-box">
+      <h3>Option 1: Annual Maintenance Contract (AMC Retainer) — Recommended</h3>
+      <p style="font-size: 12.5px; margin-bottom: 8px;">Ensure zero downtime, ongoing package updates, domain monitoring, and priority turnaround for updates:</p>
+      <ul>
+        <li>Continuous Node.js, Vite, and database package security updates.</li>
+        <li>Priority emergency technical support (&lt; 4 hours SLA).</li>
+        <li>Quarterly database index and performance audits.</li>
+        <li>Up to 2–3 hours/month of minor UI tweaks, promotional updates, or seasonal notices.</li>
+      </ul>
+    </div>
+
+    <div class="support-box" style="margin-top: 14px; background: #fff;">
+      <h3>Option 2: On-Demand Support & Custom Feature Expansion</h3>
+      <p style="font-size: 12.5px; margin-bottom: 8px;">No recurring fee. Support and new development are quoted and billed on an ad-hoc basis:</p>
+      <ul>
+        <li>Paid per hour or per fixed-scope milestone for major new features (e.g. online payment gateway, customer SMS marketing, loyalty rewards).</li>
+        <li>Routine developer interventions or emergency fixes outside the concluded warranty will be billed separately.</li>
+      </ul>
+    </div>
+
+    <!-- 5. Sign-Off Sheet -->
+    <h2>5. Official Project Handover Sign-Off</h2>
+    <p>By signing below, both parties acknowledge the successful delivery of the web application and the formal completion of the 6-month complimentary support period as of <strong>November 14, 2026</strong>.</p>
+
+    <div class="signoff-grid">
+      <div class="sign-col">
+        <strong>Delivered By (Developer / Engineering):</strong>
+        <div class="sign-line"></div>
+        <div>Full-Stack Lead Developer</div>
+        <div>Date: November 14, 2026</div>
+      </div>
+      <div class="sign-col">
+        <strong>Accepted By (Bobby Salon Management):</strong>
+        <div class="sign-line"></div>
+        <div>Authorized Representative / Owner</div>
+        <div>Date: ________________________</div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>

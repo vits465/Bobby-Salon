@@ -415,9 +415,10 @@ function isValidDateString(dateStr) {
 }
 
 function isBarberOnLeave(barberName, targetDate, leavesList) {
-  if (!leavesList || !Array.isArray(leavesList)) return false;
+  if (!leavesList || !Array.isArray(leavesList) || !targetDate) return false;
   const bLower = (barberName || '').toLowerCase().trim();
   return leavesList.some(leave => {
+    if (!leave || !leave.date) return false;
     const lBarber = (leave.barber || '').toLowerCase().trim();
     const matchBarber = (bLower === lBarber) ||
       (bLower.includes('shetty') && lBarber.includes('shetty')) ||
@@ -1002,20 +1003,20 @@ app.post('/api/book', bookingRateLimit, async (req, res) => {
 
           const bobbyNeeded = bobbyOnLeave ? 0 : Math.max(0, perBarberMax - bobbyCount);
           const bobbyFromAny = Math.min(remainingAny, bobbyNeeded);
-          const effectiveBobby = bobbyCount + bobbyFromAny;
+          const effectiveBobbyCount = bobbyCount + bobbyFromAny;
           remainingAny -= bobbyFromAny;
 
           const sumitNeeded = sumitOnLeave ? 0 : Math.max(0, perBarberMax - sumitCount);
           const sumitFromAny = Math.min(remainingAny, sumitNeeded);
-          const effectiveSumit = sumitCount + sumitFromAny;
+          const effectiveSumitCount = sumitCount + sumitFromAny;
           remainingAny -= sumitFromAny;
 
           const shettyNeeded = shettyOnLeave ? 0 : Math.max(0, perBarberMax - shettyCount);
           const shettyFromAny = Math.min(remainingAny, shettyNeeded);
-          const effectiveShetty = shettyCount + shettyFromAny;
+          const effectiveShettyCount = shettyCount + shettyFromAny;
           remainingAny -= shettyFromAny;
 
-          const bobbyFull = bobbyOnLeave || effectiveBobby >= perBarberMax;
+          const bobbyFull = bobbyOnLeave || effectiveBobbyCount >= perBarberMax;
           const sumitFull = sumitOnLeave || effectiveSumitCount >= perBarberMax;
           const shettyFull = shettyOnLeave || effectiveShettyCount >= perBarberMax;
 
