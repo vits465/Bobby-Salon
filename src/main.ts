@@ -826,7 +826,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         if (!res.ok) {
-          const errorData = await res.json();
+          const errorData = await res.json().catch(() => ({}));
+          // Automated fail-safe: if server 500 error, never lose customer — route directly to WhatsApp
+          if (res.status >= 500) {
+            const fallbackMsg = `Hello Bobby Salon!\n*NEW APPOINTMENT REQUEST*\n\n*Details:*\nName: ${name}\nPhone: ${phone}\nGender: ${gender}\nService: ${service}\nBarber: ${barber}\nDate: ${date}\nTime: ${time}\n\n(Auto-backup routing) Please confirm my slot!`;
+            const fallbackUrl = `https://wa.me/917574947065?text=${encodeURIComponent(fallbackMsg)}`;
+            showToast('Server busy. Redirecting to WhatsApp to secure your slot directly...', 'info');
+            setTimeout(() => {
+              window.location.href = fallbackUrl;
+            }, 1200);
+            return;
+          }
           showToast(errorData.error || 'Failed to book slot', 'error');
           submitBtn.disabled = false;
           submitBtn.innerHTML = 'BOOK VIA WHATSAPP &rarr;';
@@ -912,9 +922,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
       } catch {
-        showToast('Server error while booking.', 'error');
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = 'BOOK VIA WHATSAPP &rarr;';
+        const fallbackMsg = `Hello Bobby Salon!\n*NEW APPOINTMENT REQUEST*\n\n*Details:*\nName: ${name}\nPhone: ${phone}\nGender: ${gender}\nService: ${service}\nBarber: ${barber}\nDate: ${date}\nTime: ${time}\n\n(Network fail-safe routing) Please confirm my slot!`;
+        const fallbackUrl = `https://wa.me/917574947065?text=${encodeURIComponent(fallbackMsg)}`;
+        showToast('Connection issue. Redirecting directly to WhatsApp to complete booking...', 'info');
+        setTimeout(() => {
+          window.location.href = fallbackUrl;
+        }, 1200);
       }
     });
   }
